@@ -9,7 +9,8 @@ import {
   createParticle, 
   createLightSpark, 
   reflectProjectile,
-  isInBounds
+  isInBounds,
+  immobilizePlayer
 } from './gameUtils.js'
 import {
   updateEnemy,
@@ -23,6 +24,23 @@ import {
   calculateUpgradeEffects
 } from './upgradeSystem.js'
 import './App.css'
+
+const initialPermanentUpgrades = {
+  shieldDuration: 0,
+  sparkYield: 0,
+  startHealth: 0,
+  healthRegen: 0,
+};
+
+const initialTempUpgrades = {
+  parry_size: 0,
+  parry_duration: 0,
+  double_sparks: 0,
+  health_regen: 0,
+  parry_cooldown: 0,
+  spark_magnet: 0,
+  extra_health: 0,
+};
 
 // Game constants
 const CANVAS_WIDTH = 800
@@ -87,24 +105,11 @@ function App() {
   // Permanent upgrades
   const [permanentUpgrades, setPermanentUpgrades] = useState(() => {
     const saved = localStorage.getItem('permanentUpgrades')
-    return saved ? JSON.parse(saved) : {
-      shieldDuration: 0,
-      sparkYield: 0,
-      startHealth: 0,
-      healthRegen: 0
-    }
+    return saved ? JSON.parse(saved) : { ...initialPermanentUpgrades }
   })
   
   // Temporary upgrades (for current run)
-  const [tempUpgrades, setTempUpgrades] = useState({
-    parry_size: 0,
-    parry_duration: 0,
-    double_sparks: 0,
-    health_regen: 0,
-    parry_cooldown: 0,
-    spark_magnet: 0,
-    extra_health: 0
-  })
+  const [tempUpgrades, setTempUpgrades] = useState({ ...initialTempUpgrades })
   
   // Upgrade selection
   const [upgradeOptions, setUpgradeOptions] = useState([])
@@ -136,24 +141,33 @@ function App() {
     if (gameState !== GAME_STATES.PLAYING) return
     
     setPlayer(prev => {
-      if (prev.parryCooldown <= 0) {
+      if (prev.parryCooldown <= 0 && !prev.parryActive) {
         // Calculate modified cooldown with upgrades
         const baseParryDuration = PARRY_DURATION * (1 + permanentUpgrades.shieldDuration * 0.3)
         const modifiedParryDuration = baseParryDuration * (1 + tempUpgrades.parry_duration * 0.1)
-        const modifiedParryCooldown = PARRY_COOLDOWN * (1 - tempUpgrades.parry_cooldown * 0.15)
-        console.log('Parry activated. Cooldown:', modifiedParryCooldown, 'Duration:', modifiedParryDuration);
+        console.log('Parry activated. Duration:', modifiedParryDuration);
         
         return {
           ...prev,
           parryActive: true,
-          parryCooldown: modifiedParryCooldown,
           parryDuration: modifiedParryDuration,
           parryStartTime: performance.now()
         }
       }
       return prev
     })
-  }, [gameState, permanentUpgrades.shieldDuration, tempUpgrades.parry_duration, tempUpgrades.parry_cooldown])
+  }, [gameState, permanentUpgrades.shieldDuration, tempUpgrades.parry_duration])
+
+  const startNewGame = () => {
+    localStorage.removeItem('totalLightSparks');
+    localStorage.removeItem('permanentUpgrades');
+    setTotalLightSparks(0);
+    setPermanentUpgrades({ ...initialPermanentUpgrades });
+    
+    setTimeout(() => {
+      startGame();
+    }, 0);
+  };
 
   // Start new game
   const startGame = () => {
@@ -189,22 +203,14 @@ function App() {
     setProjectiles([])
     setSparks([])
     setParticles([])
-    setTempUpgrades({
-      parry_size: 0,
-      parry_duration: 0,
-      double_sparks: 0,
-      health_regen: 0,
-      parry_cooldown: 0,
-      spark_magnet: 0,
-      extra_health: 0
-    })
+    setTempUpgrades({ ...initialTempUpgrades })
   }
 
   // Game over
-  const gameOver = () => {
+  const gameOver = useCallback(() => {
     setGameState(GAME_STATES.GAME_OVER)
     setTotalLightSparks(prev => prev + lightSparks)
-  }
+  }, [lightSparks])
 
   // Select upgrade and continue to next wave
   const selectUpgrade = (upgradeType) => {
@@ -273,24 +279,28 @@ function App() {
       })
       
       enemies.forEach(enemy => {
-        ctx.fillStyle = '#ff0066'
-        ctx.shadowColor = '#ff0066'
-        ctx.shadowBlur = 8
-        ctx.beginPath()
-        ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.shadowBlur = 0
-      })
+        ctx.fillStyle = enemy.body.color;
+        ctx.shadowColor = enemy.body.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, enemy.body.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
       
       projectiles.forEach(projectile => {
-        ctx.fillStyle = projectile.fromPlayer ? '#00ff00' : '#ff3333'
-        ctx.shadowColor = projectile.fromPlayer ? '#00ff00' : '#ff3333'
-        ctx.shadowBlur = 6
-        ctx.beginPath()
-        ctx.arc(projectile.x, projectile.y, 4, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.shadowBlur = 0
-      })
+        ctx.fillStyle = projectile.color;
+        ctx.shadowColor = projectile.color;
+        ctx.shadowBlur = 6;
+        if (projectile.visualEffect === 'blinking') {
+          ctx.globalAlpha = Math.abs(Math.sin(performance.now() / 100));
+        }
+        ctx.beginPath();
+        ctx.arc(projectile.x, projectile.y, projectile.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      });
       
       ctx.fillStyle = '#ffff00'
       ctx.shadowColor = '#ffff00'
@@ -359,21 +369,25 @@ function App() {
     if (gameState === GAME_STATES.PLAYING) {
       setPlayer(prev => {
         let { parryActive, parryCooldown, parryDuration, parryStartTime } = prev;
+        let newParryCooldown = parryCooldown;
 
         if (parryActive) {
           const parryElapsed = currentTime - parryStartTime;
-          console.log(`Parry active. Elapsed: ${parryElapsed.toFixed(2)}, Duration: ${parryDuration.toFixed(2)}`);
           if (parryElapsed >= parryDuration) {
             parryActive = false;
-            console.log('Parry deactivated.');
+            const modifiedParryCooldown = PARRY_COOLDOWN * (1 - tempUpgrades.parry_cooldown * 0.15);
+            newParryCooldown = modifiedParryCooldown;
+            console.log('Parry deactivated. Cooldown started:', newParryCooldown);
           }
+        } else {
+          newParryCooldown = Math.max(0, parryCooldown - deltaTime * 1000);
         }
 
         const newPlayer = {
           ...prev,
           x: mousePos.x,
           y: mousePos.y,
-          parryCooldown: Math.max(0, parryCooldown - deltaTime * 1000),
+          parryCooldown: newParryCooldown,
           parryActive,
         };
         
@@ -506,50 +520,63 @@ function App() {
           if (projectile.fromPlayer) {
             setEnemies(prevEnemies => {
               return prevEnemies.map(enemy => {
-                if (distance(projectile, enemy) < enemy.size + 4) {
-                  projectileDestroyed = true
-                  
+                if (distance(projectile, enemy) < enemy.body.radius + projectile.radius) {
+                  projectileDestroyed = true;
+
                   for (let i = 0; i < 6; i++) {
-                    newParticles.push(createParticle(
-                      enemy.x, 
-                      enemy.y, 
-                      enemy.color || '#ff0066'
-                    ))
+                    newParticles.push(
+                      createParticle(enemy.x, enemy.y, enemy.body.color)
+                    );
                   }
-                  
-                  const damagedEnemy = damageEnemy(enemy, projectile.damage)
-                  
+
+                  const damagedEnemy = damageEnemy(enemy, projectile.damage);
+
                   if (!damagedEnemy.alive) {
-                    setEnemiesKilled(prev => prev + 1)
-                    setScore(prev => prev + 25)
-                    
-                    const baseSparkCount = 2
-                    const sparkMultiplier = 1 + (permanentUpgrades.sparkYield * 1.5)
-                    const totalSparks = Math.floor(baseSparkCount * sparkMultiplier)
-                    
+                    setEnemiesKilled(prev => prev + 1);
+                    setScore(prev => prev + 25);
+
+                    const baseSparkCount = 2;
+                    const sparkMultiplier = 1 + permanentUpgrades.sparkYield * 1.5;
+                    const totalSparks = Math.floor(
+                      baseSparkCount * sparkMultiplier
+                    );
+
                     for (let i = 0; i < totalSparks; i++) {
-                      newSparks.push(createLightSpark(enemy.x, enemy.y))
+                      newSparks.push(createLightSpark(enemy.x, enemy.y));
                     }
                   }
-                  
-                  return damagedEnemy
+
+                  return damagedEnemy;
                 }
-                return enemy
-              })
-            })
+                return enemy;
+              });
+            });
           }
           
           if (!projectile.fromPlayer && !player.parryActive) {
-            if (distance(projectile, player) < PLAYER_SIZE + 4) {
-              playerHit = true
-              projectileDestroyed = true
-              
+            if (distance(projectile, player) < PLAYER_SIZE + projectile.radius) {
+              if (projectile.type !== 'penetrating') {
+                playerHit = true;
+                projectileDestroyed = true;
+              }
+
+              if (projectile.onHitEffect === 'enlargePlayer') {
+                setPlayer(prev => ({
+                  ...prev,
+                  size: prev.size * 1.5,
+                }));
+                setTimeout(() => {
+                  setPlayer(prev => ({
+                    ...prev,
+                    size: PLAYER_SIZE,
+                  }));
+                }, projectile.enlargeDuration);
+              }
+
               for (let i = 0; i < 8; i++) {
-                newParticles.push(createParticle(
-                  player.x, 
-                  player.y, 
-                  '#ff3333'
-                ))
+                newParticles.push(
+                  createParticle(player.x, player.y, projectile.color)
+                );
               }
             }
           }
@@ -640,6 +667,78 @@ function App() {
     }
   }, [gameLoop])
 
+  // Player-enemy collision
+  useEffect(() => {
+    if (gameState !== GAME_STATES.PLAYING) return;
+
+    let playerHealthLoss = 0;
+    let enemiesKilledCount = 0;
+    let scoreToAdd = 0;
+    const sparksToAdd = [];
+    const enemiesToUpdate = new Map();
+
+    enemies.forEach(enemy => {
+      if (enemy.alive && distance(player, enemy) < PLAYER_SIZE + enemy.body.radius) {
+        if (player.parryActive) {
+          const damagedEnemy = damageEnemy(enemy, 100); // Instantly kill the enemy
+          enemiesToUpdate.set(enemy, damagedEnemy);
+
+          if (!damagedEnemy.alive) {
+            enemiesKilledCount++;
+            scoreToAdd += 25;
+
+            const baseSparkCount = 2;
+            const sparkMultiplier = 1 + permanentUpgrades.sparkYield * 1.5;
+            const totalSparks = Math.floor(baseSparkCount * sparkMultiplier);
+
+            for (let i = 0; i < totalSparks; i++) {
+              sparksToAdd.push(createLightSpark(enemy.x, enemy.y));
+            }
+          }
+        } else {
+          switch (enemy.body.onTouch) {
+            case 'damage':
+              playerHealthLoss++;
+              break;
+            case 'immobilize':
+              immobilizePlayer(player, 2000);
+              break;
+            default:
+              break;
+          }
+        }
+      }
+    });
+
+    if (enemiesToUpdate.size > 0) {
+      setEnemies(prevEnemies =>
+        prevEnemies.map(e => enemiesToUpdate.get(e) || e)
+      );
+    }
+
+    if (sparksToAdd.length > 0) {
+      setSparks(prev => [...prev, ...sparksToAdd]);
+    }
+    
+    if (enemiesKilledCount > 0) {
+      setEnemiesKilled(prev => prev + enemiesKilledCount);
+    }
+
+    if (scoreToAdd > 0) {
+      setScore(prev => prev + scoreToAdd);
+    }
+
+    if (playerHealthLoss > 0) {
+      setPlayer(prev => {
+        const newHealth = prev.health - playerHealthLoss;
+        if (newHealth <= 0 && prev.health > 0) { // Ensure gameOver is called only once
+          setTimeout(() => gameOver(), 100);
+        }
+        return { ...prev, health: newHealth };
+      });
+    }
+  }, [enemies, gameState, player, permanentUpgrades.sparkYield, gameOver]);
+
   // Event listeners
   useEffect(() => {
     const canvas = canvasRef.current
@@ -658,7 +757,8 @@ function App() {
     switch (gameState) {
       case GAME_STATES.MENU:
         return <MainMenu 
-          onStartGame={startGame} 
+          onStartGame={startGame}
+          onStartNewGame={startNewGame}
           onShowUpgrades={() => setGameState(GAME_STATES.PERMANENT_UPGRADES)}
           totalLightSparks={totalLightSparks} 
         />;

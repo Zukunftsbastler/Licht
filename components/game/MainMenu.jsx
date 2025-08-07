@@ -1,7 +1,9 @@
 import React from 'react';
 import { Button } from '@/components/ui/button.jsx';
 
-const MainMenu = ({ onStartGame, onShowUpgrades, totalLightSparks }) => {
+const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSparks }) => {
+  const hasSaveGame = totalLightSparks > 0;
+
   return (
     <div className="text-center">
       <h1 className="text-6xl font-bold mb-4 text-yellow-400 glow">
@@ -17,11 +19,19 @@ const MainMenu = ({ onStartGame, onShowUpgrades, totalLightSparks }) => {
       </p>
       <div className="space-y-4">
         <Button 
-          onClick={onStartGame}
-          className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold px-8 py-3 text-xl"
+          onClick={onStartNewGame}
+          className="bg-green-600 hover:bg-green-700 text-black font-bold px-8 py-3 text-xl"
         >
-          Spiel starten
+          Neues Spiel
         </Button>
+        {hasSaveGame && (
+          <Button 
+            onClick={onStartGame}
+            className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold px-8 py-3 text-xl"
+          >
+            Weiter
+          </Button>
+        )}
         <Button 
           onClick={onShowUpgrades}
           className="bg-cyan-600 hover:bg-cyan-700 text-black font-bold px-8 py-3 text-xl"

@@ -20,262 +20,293 @@ function getWaveColor(wave) {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
-// Enemy types
-export const ENEMY_TYPES = {
-  SHADOW_MOTH: 'shadow_moth',
-  DARK_CRAWLER: 'dark_crawler',
-  VOID_SPITTER: 'void_spitter',
-  ELITE_ENEMY: 'elite_enemy' // New elite enemy type
-}
+// Projectile types
+export const PROJECTILE_TYPES = {
+  NORMAL: {
+    type: 'normal',
+    speed: 150,
+    damage: 1,
+    radius: 5,
+    color: '#ff3333',
+    visualEffect: 'none',
+    onHitEffect: 'none',
+  },
+  PENETRATING: {
+    type: 'penetrating',
+    speed: 100,
+    damage: 1,
+    radius: 6,
+    color: '#ffffff',
+    visualEffect: 'blinking',
+    onHitEffect: 'none',
+  },
+  ENLARGING: {
+    type: 'enlarging',
+    speed: 200,
+    damage: 0,
+    radius: 7,
+    color: '#00ff00',
+    visualEffect: 'none',
+    onHitEffect: 'enlargePlayer',
+    enlargeDuration: 10000,
+  },
+};
 
-// Create enemy based on type
-export function createEnemy(type, x, y, wave) {
-  const baseEnemy = {
+// Enemy templates
+export const ENEMY_TEMPLATES = {
+  BASIC: {
+    body: {
+      radius: 10,
+      health: 1,
+      color: '#ff0066',
+      onTouch: 'damage',
+      isSolid: true,
+    },
+    movement: {
+      type: 'straight',
+      speed: 50,
+    },
+    attack: {
+      type: 'singleShot',
+      projectile: PROJECTILE_TYPES.NORMAL,
+      fireRate: 2000,
+    },
+  },
+  FAST: {
+    body: {
+      radius: 8,
+      health: 1,
+      color: 'purple',
+      onTouch: 'damage',
+      isSolid: true,
+    },
+    movement: {
+      type: 'homing',
+      speed: 100,
+    },
+    attack: {
+      type: 'singleShot',
+      projectile: PROJECTILE_TYPES.NORMAL,
+      fireRate: 1500,
+    },
+  },
+  BURST: {
+    body: {
+      radius: 12,
+      health: 2,
+      color: '#8800ff',
+      onTouch: 'damage',
+      isSolid: true,
+    },
+    movement: {
+      type: 'still',
+      speed: 0,
+    },
+    attack: {
+      type: 'burst',
+      projectile: PROJECTILE_TYPES.NORMAL,
+      fireRate: 3000,
+      burstCount: 3,
+      burstDelay: 200,
+    },
+  },
+  SPREAD: {
+    body: {
+      radius: 15,
+      health: 3,
+      color: '#ff3300',
+      onTouch: 'damage',
+      isSolid: true,
+    },
+    movement: {
+      type: 'straight',
+      speed: 30,
+    },
+    attack: {
+      type: 'spread',
+      projectile: PROJECTILE_TYPES.NORMAL,
+      fireRate: 2500,
+      spreadCount: 8,
+      spreadAngle: 45,
+    },
+  },
+};
+
+// Create enemy from a template
+export function createEnemy(template, x, y, wave) {
+  const enemy = {
+    ...template,
     x,
     y,
-    type,
-    health: 1,
-    maxHealth: 1,
-    speed: 50,
-    size: 8,
+    wave,
     lastShot: 0,
-    shootCooldown: 2000,
     targetX: x,
     targetY: y,
     moveTimer: 0,
-    alive: true
-  }
+    alive: true,
+  };
 
-  switch (type) {
-    case ENEMY_TYPES.SHADOW_MOTH:
-      return {
-        ...baseEnemy,
-        health: 1 + Math.floor(wave / 3),
-        maxHealth: 1 + Math.floor(wave / 3),
-        speed: 30 + wave * 5,
-        size: 10,
-        shootCooldown: Math.max(1000, 2500 - wave * 100),
-        color: '#ff0066',
-        shadowColor: '#ff0066'
-      }
-    
-    case ENEMY_TYPES.DARK_CRAWLER:
-      return {
-        ...baseEnemy,
-        health: 2 + Math.floor(wave / 2),
-        maxHealth: 2 + Math.floor(wave / 2),
-        speed: 20 + wave * 3,
-        size: 12,
-        shootCooldown: Math.max(1500, 3000 - wave * 150),
-        color: '#8800ff',
-        shadowColor: '#8800ff'
-      }
-    
-    case ENEMY_TYPES.VOID_SPITTER:
-      return {
-        ...baseEnemy,
-        health: 3 + Math.floor(wave / 2),
-        maxHealth: 3 + Math.floor(wave / 2),
-        speed: 15 + wave * 2,
-        size: 15,
-        shootCooldown: Math.max(800, 2000 - wave * 80),
-        color: '#ff3300',
-        shadowColor: '#ff3300'
-      }
-    
-    case ENEMY_TYPES.ELITE_ENEMY:
-      const eliteWave = Math.floor((wave - 2) / 2) + 1 // Which elite generation
-      const baseSpeed = 30 + wave * 5 // Base speed from shadow moth
-      const eliteSpeed = baseSpeed * Math.pow(1.3, eliteWave) // 30% faster each generation
-      
-      return {
-        ...baseEnemy,
-        health: 2 + Math.floor(wave / 2),
-        maxHealth: 2 + Math.floor(wave / 2),
-        speed: eliteSpeed,
-        size: 11,
-        shootCooldown: Math.max(800, 2000 - wave * 120),
-        color: getWaveColor(wave),
-        shadowColor: getWaveColor(wave),
-        isElite: true
-      }
-    
-    default:
-      return baseEnemy
-  }
+  // Scale enemy stats with wave number
+  enemy.body.health += Math.floor(wave / 3);
+  enemy.movement.speed += wave * 2;
+  enemy.attack.fireRate = Math.max(500, enemy.attack.fireRate - wave * 50);
+
+  return enemy;
 }
 
 // Update enemy AI and behavior
 export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, canvasHeight) {
-  if (!enemy.alive) return enemy
+  if (!enemy.alive) return enemy;
 
-  // Update movement timer
-  enemy.moveTimer += deltaTime
+  // Movement
+  switch (enemy.movement.type) {
+    case 'still':
+      break;
+    case 'homing':
+      const dxHoming = player.x - enemy.x;
+      const dyHoming = player.y - enemy.y;
+      const distHoming = Math.sqrt(dxHoming * dxHoming + dyHoming * dyHoming);
+      if (distHoming > 5) {
+        enemy.x += (dxHoming / distHoming) * enemy.movement.speed * deltaTime;
+        enemy.y += (dyHoming / distHoming) * enemy.movement.speed * deltaTime;
+      }
+      break;
+    case 'straight':
+    default:
+      // Update movement timer
+      enemy.moveTimer += deltaTime;
 
-  // Choose new target position every 2-4 seconds
-  if (enemy.moveTimer > 2 + Math.random() * 2) {
-    enemy.moveTimer = 0
-    
-    // Stay at edge of screen but move around
-    const edge = Math.floor(Math.random() * 4)
-    const margin = 100
-    
-    switch (edge) {
-      case 0: // Top
-        enemy.targetX = margin + Math.random() * (canvasWidth - 2 * margin)
-        enemy.targetY = margin
-        break
-      case 1: // Right
-        enemy.targetX = canvasWidth - margin
-        enemy.targetY = margin + Math.random() * (canvasHeight - 2 * margin)
-        break
-      case 2: // Bottom
-        enemy.targetX = margin + Math.random() * (canvasWidth - 2 * margin)
-        enemy.targetY = canvasHeight - margin
-        break
-      case 3: // Left
-        enemy.targetX = margin
-        enemy.targetY = margin + Math.random() * (canvasHeight - 2 * margin)
-        break
-    }
-  }
+      // Choose new target position every 2-4 seconds
+      if (enemy.moveTimer > 2 + Math.random() * 2) {
+        enemy.moveTimer = 0;
 
-  // Move towards target position
-  const dx = enemy.targetX - enemy.x
-  const dy = enemy.targetY - enemy.y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  
-  if (dist > 5) {
-    enemy.x += (dx / dist) * enemy.speed * deltaTime
-    enemy.y += (dy / dist) * enemy.speed * deltaTime
+        // Stay at edge of screen but move around
+        const edge = Math.floor(Math.random() * 4);
+        const margin = 100;
+
+        switch (edge) {
+          case 0: // Top
+            enemy.targetX = margin + Math.random() * (canvasWidth - 2 * margin);
+            enemy.targetY = margin;
+            break;
+          case 1: // Right
+            enemy.targetX = canvasWidth - margin;
+            enemy.targetY = margin + Math.random() * (canvasHeight - 2 * margin);
+            break;
+          case 2: // Bottom
+            enemy.targetX = margin + Math.random() * (canvasWidth - 2 * margin);
+            enemy.targetY = canvasHeight - margin;
+            break;
+          case 3: // Left
+            enemy.targetX = margin;
+            enemy.targetY = margin + Math.random() * (canvasHeight - 2 * margin);
+            break;
+        }
+      }
+
+      // Move towards target position
+      const dx = enemy.targetX - enemy.x;
+      const dy = enemy.targetY - enemy.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 5) {
+        enemy.x += (dx / dist) * enemy.movement.speed * deltaTime;
+        enemy.y += (dy / dist) * enemy.movement.speed * deltaTime;
+      }
+      break;
   }
 
   // Shooting behavior
-  if (currentTime - enemy.lastShot > enemy.shootCooldown) {
-    enemy.lastShot = currentTime
-    return { ...enemy, shouldShoot: true }
+  if (currentTime - enemy.lastShot > enemy.attack.fireRate) {
+    enemy.lastShot = currentTime;
+    return { ...enemy, shouldShoot: true };
   }
 
-  return { ...enemy, shouldShoot: false }
+  return { ...enemy, shouldShoot: false };
 }
 
 // Create projectile from enemy
 export function createEnemyProjectile(enemy, player) {
-  const dx = player.x - enemy.x
-  const dy = player.y - enemy.y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  
-  if (dist === 0) return null
+  const projectileType = enemy.attack.projectile || PROJECTILE_TYPES.NORMAL;
+  const dx = player.x - enemy.x;
+  const dy = player.y - enemy.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
 
-  const speed = 120 + Math.random() * 60
-  const spread = 0.1 // Add some inaccuracy
-  const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * spread
+  if (dist === 0) return null;
 
-  return {
+  const angle = Math.atan2(dy, dx);
+
+  const projectile = {
+    ...projectileType,
     x: enemy.x,
     y: enemy.y,
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
+    vx: Math.cos(angle) * projectileType.speed,
+    vy: Math.sin(angle) * projectileType.speed,
     fromPlayer: false,
-    damage: 1,
-    color: enemy.color || '#ff3333'
-  }
+  };
+
+  return projectile;
 }
 
 // Damage enemy
 export function damageEnemy(enemy, damage) {
-  const newHealth = enemy.health - damage
+  const newHealth = enemy.body.health - damage;
+  const newBody = { ...enemy.body, health: newHealth };
   return {
     ...enemy,
-    health: newHealth,
-    alive: newHealth > 0
-  }
+    body: newBody,
+    alive: newHealth > 0,
+  };
 }
 
 // Wave configuration
 export function getWaveConfig(wave) {
-  // Base enemies increase by 1 each wave
-  const baseEnemies = Math.min(2 + wave, 15)
-  const enemies = []
+  const enemyCount = Math.min(2 + wave, 15);
+  const enemyTemplates = [];
 
-  // Add elite enemies from previous waves (every 2 waves starting from wave 2)
-  for (let eliteWave = 2; eliteWave < wave; eliteWave += 2) {
-    enemies.push(ENEMY_TYPES.ELITE_ENEMY)
-  }
-
-  // Add new elite enemy every 2 waves starting from wave 2
-  if (wave >= 2 && wave % 2 === 0) {
-    enemies.push(ENEMY_TYPES.ELITE_ENEMY)
-  }
-
-  // Fill remaining slots with regular enemies
-  const remainingSlots = baseEnemies - enemies.length
-
-  if (wave <= 2) {
-    // Wave 1-2: Only Shadow Moths
-    for (let i = 0; i < remainingSlots; i++) {
-      enemies.push(ENEMY_TYPES.SHADOW_MOTH)
-    }
-  } else if (wave <= 5) {
-    // Wave 3-5: Moths and Crawlers
-    const mothCount = Math.ceil(remainingSlots * 0.6)
-    const crawlerCount = remainingSlots - mothCount
-    
-    for (let i = 0; i < mothCount; i++) {
-      enemies.push(ENEMY_TYPES.SHADOW_MOTH)
-    }
-    for (let i = 0; i < crawlerCount; i++) {
-      enemies.push(ENEMY_TYPES.DARK_CRAWLER)
-    }
+  if (wave % 5 === 0) {
+    // Boss wave
+    const boss = { ...ENEMY_TEMPLATES.SPREAD };
+    boss.body.health *= 5;
+    boss.body.radius *= 2;
+    boss.attack.spreadCount = 16;
+    enemyTemplates.push(boss);
   } else {
-    // Wave 6+: All enemy types
-    const mothCount = Math.ceil(remainingSlots * 0.4)
-    const crawlerCount = Math.floor(remainingSlots * 0.3)
-    const spitterCount = remainingSlots - mothCount - crawlerCount
-    
-    for (let i = 0; i < mothCount; i++) {
-      enemies.push(ENEMY_TYPES.SHADOW_MOTH)
-    }
-    for (let i = 0; i < crawlerCount; i++) {
-      enemies.push(ENEMY_TYPES.DARK_CRAWLER)
-    }
-    for (let i = 0; i < spitterCount; i++) {
-      enemies.push(ENEMY_TYPES.VOID_SPITTER)
+    // Regular wave
+    for (let i = 0; i < enemyCount; i++) {
+      const rand = Math.random();
+      if (rand < 0.5) {
+        enemyTemplates.push(ENEMY_TEMPLATES.BASIC);
+      } else if (rand < 0.8) {
+        enemyTemplates.push(ENEMY_TEMPLATES.FAST);
+      } else {
+        enemyTemplates.push(ENEMY_TEMPLATES.BURST);
+      }
     }
   }
 
   return {
-    enemies,
-    spawnDelay: Math.max(500, 2000 - wave * 100), // Time between enemy spawns
-    waveBonus: wave * 50 // Bonus points for completing wave
-  }
+    enemies: enemyTemplates,
+    spawnDelay: Math.max(500, 2000 - wave * 100),
+    waveBonus: wave * 50,
+  };
 }
 
 // Spawn enemies for wave
 export function spawnWaveEnemies(wave, canvasWidth, canvasHeight) {
-  const config = getWaveConfig(wave)
-  const enemies = []
-  let eliteIndex = 0
+  const config = getWaveConfig(wave);
+  const enemies = [];
 
-  config.enemies.forEach((enemyType, index) => {
-    const spawnPos = getRandomEdgePosition(canvasWidth, canvasHeight)
-    
-    // For elite enemies, use their original wave for proper scaling
-    let enemyWave = wave
-    if (enemyType === ENEMY_TYPES.ELITE_ENEMY) {
-      enemyWave = 2 + (eliteIndex * 2) // Wave 2, 4, 6, etc.
-      eliteIndex++
-    }
-    
-    const enemy = createEnemy(enemyType, spawnPos.x, spawnPos.y, enemyWave)
-    
+  config.enemies.forEach((template, index) => {
+    const spawnPos = getRandomEdgePosition(canvasWidth, canvasHeight);
+    const enemy = createEnemy(template, spawnPos.x, spawnPos.y, wave);
+
     // Stagger spawn times
-    enemy.spawnDelay = index * config.spawnDelay
-    enemy.spawned = false
-    
-    enemies.push(enemy)
-  })
+    enemy.spawnDelay = index * config.spawnDelay;
+    enemy.spawned = false;
 
-  return enemies
+    enemies.push(enemy);
+  });
+
+  return enemies;
 }
-
