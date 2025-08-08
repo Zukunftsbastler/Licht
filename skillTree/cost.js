@@ -12,17 +12,22 @@
  */
 export function computeCost(node, currentLevel, ctx) {
   const c = node.cost;
+  const firstBase = typeof c.firstLevelBase === "number" ? c.firstLevelBase : undefined;
+
   switch (c.type) {
     case "exp": {
-      const amount = c.base * Math.pow(c.factor, currentLevel);
+      const base = currentLevel === 0 && firstBase != null ? firstBase : c.base;
+      const amount = base * Math.pow(c.factor, currentLevel);
       return Math.max(1, Math.floor(amount));
     }
     case "static": {
-      return Math.max(1, Math.floor(c.base));
+      const base = currentLevel === 0 && firstBase != null ? firstBase : c.base;
+      return Math.max(1, Math.floor(base));
     }
     case "waveScaled": {
       const wave = ctx?.wave ?? 0;
-      const baseWithWave = c.base + Math.floor(wave * c.base * 0.25);
+      const base = currentLevel === 0 && firstBase != null ? firstBase : c.base;
+      const baseWithWave = base + Math.floor(wave * base * 0.25);
       const amount = baseWithWave * Math.pow(c.factor, currentLevel);
       return Math.max(1, Math.floor(amount));
     }

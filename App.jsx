@@ -44,6 +44,10 @@ const initialTempUpgrades = {
   extra_health: 0,
 };
 
+// Meta Skill-Tree initial state
+const initialMetaProgress = {};
+const initialMetaStats = { totalSparksSpent: 0, achievements: [] };
+
 // Game constants
 const CANVAS_WIDTH = 800
 const CANVAS_HEIGHT = 600
@@ -118,11 +122,11 @@ function App() {
   // Meta Skill-Tree state
   const [metaProgress, setMetaProgress] = useState(() => {
     const saved = localStorage.getItem('metaProgress')
-    return saved ? JSON.parse(saved) : {}
+    return saved ? JSON.parse(saved) : { ...initialMetaProgress }
   })
   const [metaStats, setMetaStats] = useState(() => {
     const saved = localStorage.getItem('metaStats')
-    return saved ? JSON.parse(saved) : { totalSparksSpent: 0, achievements: [] }
+    return saved ? JSON.parse(saved) : { ...initialMetaStats }
   })
 
   const metaNodeIndex = useMemo(() => indexById(metaNodes), [])
@@ -196,8 +200,12 @@ function App() {
   const startNewGame = () => {
     localStorage.removeItem('totalLightSparks');
     localStorage.removeItem('permanentUpgrades');
+    localStorage.removeItem('metaProgress');
+    localStorage.removeItem('metaStats');
     setTotalLightSparks(0);
     setPermanentUpgrades({ ...initialPermanentUpgrades });
+    setMetaProgress({ ...initialMetaProgress });
+    setMetaStats({ ...initialMetaStats });
     
     setTimeout(() => {
       startGame();
@@ -214,8 +222,12 @@ function App() {
     setWaveComplete(false)
     setWaveStartTime(performance.now())
     
+    // Reset all temporary (run) upgrades BEFORE computing player stats
+    const resetTempUpgrades = { ...initialTempUpgrades }
+    setTempUpgrades(resetTempUpgrades)
+    
     const baseHealth = 3 + Math.floor(permanentUpgrades.startHealth * 0.75) + (metaEffects.maxHealthBonus || 0)
-    const extraHealth = tempUpgrades.extra_health || 0
+    const extraHealth = resetTempUpgrades.extra_health || 0
     const totalHealth = baseHealth + extraHealth
     
     setPlayer({
@@ -226,6 +238,7 @@ function App() {
       speed: PLAYER_SPEED,
       parryActive: false,
       parryCooldown: 0,
+      parryCooldownDuration: 0,
       parryRadius: PARRY_RADIUS,
       parryDuration: PARRY_DURATION * (1 + permanentUpgrades.shieldDuration * 0.3),
       parryStartTime: 0
@@ -239,7 +252,7 @@ function App() {
     setProjectiles([])
     setSparks([])
     setParticles([])
-    setTempUpgrades({ ...initialTempUpgrades })
+    setUpgradeOptions([])
   }
 
   // Game over

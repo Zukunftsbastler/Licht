@@ -7,9 +7,11 @@
  */
 
 /**
- * @typedef {{ type: "static", base: number }} StaticCost
- * @typedef {{ type: "exp", base: number, factor: number }} ExpCost
- * @typedef {{ type: "waveScaled", base: number, factor: number }} WaveScaledCost
+ * Optional: firstLevelBase erlaubt einen stark vergünstigten Kauf der ersten Stufe.
+ * Gilt für alle Kostenarten.
+ * @typedef {{ type: "static", base: number, firstLevelBase?: number }} StaticCost
+ * @typedef {{ type: "exp", base: number, factor: number, firstLevelBase?: number }} ExpCost
+ * @typedef {{ type: "waveScaled", base: number, factor: number, firstLevelBase?: number }} WaveScaledCost
  * @typedef {StaticCost | ExpCost | WaveScaledCost} Cost
  */
 
@@ -42,6 +44,7 @@
  * @property {Reveal=} reveal
  * @property {string[]=} exclusiveWith
  * @property {string=} icon
+ * @property {{ x: number, y: number }=} position   // Layout-Koordinaten für Graph-Ansicht
  */
 
 /**

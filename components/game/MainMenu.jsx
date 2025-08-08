@@ -19,19 +19,17 @@ const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSpark
       </p>
       <div className="space-y-4">
         <Button 
+          onClick={onStartGame}
+          className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold px-8 py-3 text-xl"
+        >
+          Neuer Run
+        </Button>
+        <Button 
           onClick={onStartNewGame}
           className="bg-green-600 hover:bg-green-700 text-black font-bold px-8 py-3 text-xl"
         >
-          Neues Spiel
+          Neues Spiel (Hard Reset)
         </Button>
-        {hasSaveGame && (
-          <Button 
-            onClick={onStartGame}
-            className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold px-8 py-3 text-xl"
-          >
-            Weiter
-          </Button>
-        )}
         <Button 
           onClick={onShowUpgrades}
           className="bg-cyan-600 hover:bg-cyan-700 text-black font-bold px-8 py-3 text-xl"

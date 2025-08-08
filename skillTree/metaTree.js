@@ -13,8 +13,9 @@ export const metaNodes = [
     name: "Chitinpanzer",
     desc: "+5% Schadensreduktion pro Stufe.",
     maxLevel: 5,
-    cost: { type: "exp", base: 100, factor: 1.35 },
+    cost: { type: "exp", base: 100, factor: 1.35, firstLevelBase: 10 },
     tags: ["defense"],
+    position: { x: 0, y: 0 },
     icon: "🛡️",
   },
   {
@@ -22,8 +23,9 @@ export const metaNodes = [
     name: "Photonenfokus",
     desc: "+2 Grundschaden pro Stufe.",
     maxLevel: 10,
-    cost: { type: "exp", base: 120, factor: 1.28 },
+    cost: { type: "exp", base: 120, factor: 1.28, firstLevelBase: 10 },
     tags: ["offense"],
+    position: { x: 2, y: 0 },
     icon: "🔆",
   },
   {
@@ -31,8 +33,9 @@ export const metaNodes = [
     name: "Magnetismus",
     desc: "Erhöht Pickup-Radius pro Stufe.",
     maxLevel: 10,
-    cost: { type: "exp", base: 80, factor: 1.28 },
+    cost: { type: "exp", base: 80, factor: 1.28, firstLevelBase: 10 },
     tags: ["utility"],
+    position: { x: -2, y: 0 },
     icon: "🧲",
   },
 
@@ -42,10 +45,11 @@ export const metaNodes = [
     name: "Robustkörper",
     desc: "+1 Max-Leben pro Stufe.",
     maxLevel: 10,
-    cost: { type: "exp", base: 110, factor: 1.3 },
+    cost: { type: "exp", base: 110, factor: 1.3, firstLevelBase: 10 },
     tags: ["defense"],
     prereqs: ["core_armor"],
     reveal: { neighborOf: ["core_armor"] },
+    position: { x: -1, y: 1 },
     icon: "💚",
   },
   {
@@ -58,6 +62,7 @@ export const metaNodes = [
     prereqs: ["core_hp"],
     unlock: { purchasedAllOf: ["core_hp"] },
     reveal: { neighborOf: ["core_hp"] },
+    position: { x: -1, y: 2 },
     icon: "✨",
   },
 
@@ -71,6 +76,7 @@ export const metaNodes = [
     tags: ["offense"],
     prereqs: ["core_damage"],
     reveal: { neighborOf: ["core_damage"] },
+    position: { x: 3, y: 1 },
     icon: "⚡",
   },
   {
@@ -83,6 +89,7 @@ export const metaNodes = [
     prereqs: ["rof"],
     unlock: { purchasedAllOf: ["rof"] },
     reveal: { neighborOf: ["rof"] },
+    position: { x: 4, y: 2 },
     icon: "🎯",
   },
   {
@@ -95,6 +102,7 @@ export const metaNodes = [
     prereqs: ["double_shot"],
     unlock: { purchasedAllOf: ["double_shot"], totalSparksSpent: 1000 },
     reveal: { neighborOf: ["double_shot"], hiddenUntilUnlock: false },
+    position: { x: 5, y: 3 },
     icon: "🌀",
   },
 
@@ -108,6 +116,7 @@ export const metaNodes = [
     tags: ["offense"],
     prereqs: ["core_damage"],
     reveal: { neighborOf: ["core_damage"] },
+    position: { x: 2, y: -1 },
     icon: "💎",
   },
   {
@@ -120,6 +129,7 @@ export const metaNodes = [
     prereqs: ["crit_chance"],
     unlock: { purchasedAllOf: ["crit_chance"] },
     reveal: { neighborOf: ["crit_chance"] },
+    position: { x: 3, y: -1 },
     icon: "🗡️",
   },
 
@@ -135,6 +145,7 @@ export const metaNodes = [
     unlock: { purchasedAllOf: ["core_armor", "core_hp"], totalSparksSpent: 1000 },
     reveal: { neighborOf: ["core_hp"], hiddenUntilUnlock: true },
     exclusiveWith: ["keystone_glass"],
+    position: { x: -1, y: 3 },
     icon: "🐞",
   },
   {
@@ -148,6 +159,7 @@ export const metaNodes = [
     unlock: { purchasedAllOf: ["multishot", "crit_chance"], totalSparksSpent: 1500 },
     reveal: { neighborOf: ["multishot", "crit_chance"], hiddenUntilUnlock: true },
     exclusiveWith: ["keystone_tank"],
+    position: { x: 6, y: 4 },
     icon: "🦋",
   },
 
@@ -161,6 +173,7 @@ export const metaNodes = [
     tags: ["economy"],
     prereqs: ["utility_magnet"],
     reveal: { neighborOf: ["utility_magnet"] },
+    position: { x: -3, y: 1 },
     icon: "🪙",
   },
   {
@@ -173,6 +186,7 @@ export const metaNodes = [
     prereqs: ["econ_collector"],
     unlock: { purchasedAllOf: ["econ_collector"], totalSparksSpent: 800 },
     reveal: { neighborOf: ["econ_collector"], hiddenUntilUnlock: false },
+    position: { x: -4, y: 2 },
     icon: "🏷️",
   },
   {
@@ -185,6 +199,7 @@ export const metaNodes = [
     prereqs: ["econ_collector"],
     unlock: { purchasedAllOf: ["econ_collector"] },
     reveal: { neighborOf: ["econ_collector"] },
+    position: { x: -2, y: 1 },
     icon: "🔁",
   },
 ];
