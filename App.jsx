@@ -452,9 +452,11 @@ function App() {
           const updated = updateEnemy(enemy, player, deltaTime, currentTime, CANVAS_WIDTH, CANVAS_HEIGHT)
           
           if (updated.shouldShoot) {
-            const projectile = createEnemyProjectile(updated, player)
-            if (projectile) {
-              newProjectiles.push(projectile)
+            const created = createEnemyProjectile(updated, player)
+            if (Array.isArray(created)) {
+              newProjectiles.push(...created)
+            } else if (created) {
+              newProjectiles.push(created)
             }
           }
           
@@ -481,11 +483,35 @@ function App() {
       }
       
       setProjectiles(prev => {
-        return prev.map(projectile => ({
-          ...projectile,
-          x: projectile.x + projectile.vx * deltaTime,
-          y: projectile.y + projectile.vy * deltaTime
-        })).filter(projectile => 
+        return prev.map(projectile => {
+          let vx = projectile.vx
+          let vy = projectile.vy
+
+          if (projectile.homing && !projectile.fromPlayer) {
+            const dx = player.x - projectile.x
+            const dy = player.y - projectile.y
+            const dist = Math.hypot(dx, dy) || 1
+            const speed = Math.hypot(vx, vy) || (projectile.speed || 140)
+            const nx = dx / dist
+            const ny = dy / dist
+            const strength = projectile.homingStrength || 0.06
+
+            vx = vx + (nx * speed - vx) * strength
+            vy = vy + (ny * speed - vy) * strength
+
+            const mag = Math.hypot(vx, vy) || 1
+            vx = (vx / mag) * speed
+            vy = (vy / mag) * speed
+          }
+
+          return {
+            ...projectile,
+            vx,
+            vy,
+            x: projectile.x + vx * deltaTime,
+            y: projectile.y + vy * deltaTime
+          }
+        }).filter(projectile =>
           isInBounds(projectile.x, projectile.y, CANVAS_WIDTH, CANVAS_HEIGHT)
         )
       })

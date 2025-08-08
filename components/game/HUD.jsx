@@ -55,6 +55,7 @@ const HUD = ({ player, wave, score, lightSparks, permanentUpgrades, tempUpgrades
           <thead>
             <tr>
               <th className="pr-4">Name</th>
+              <th className="pr-4">Schwierigkeit</th>
               <th className="pr-4">Leben</th>
               <th className="pr-4">Tempo</th>
               <th className="pr-4">Feuerrate</th>
@@ -63,7 +64,11 @@ const HUD = ({ player, wave, score, lightSparks, permanentUpgrades, tempUpgrades
           <tbody>
             {currentWaveEnemies.map(enemy => (
               <tr key={enemy.id} className={isEnemyKilled(enemy) ? 'line-through text-gray-500' : ''}>
-                <td>{enemy.body.type || 'Gegner'}</td>
+                <td>
+                  {enemy.body.type || 'Gegner'}
+                  {enemy.body.boss ? ' (Boss)' : ''}
+                </td>
+                <td>{enemy.difficulty ?? '?'}</td>
                 <td>{enemy.body.health}</td>
                 <td>{enemy.movement.speed}</td>
                 <td>{(enemy.attack.fireRate / 1000).toFixed(2)}s</td>

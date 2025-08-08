@@ -145,10 +145,18 @@ function getMovementTypeScore(type) {
   switch (type) {
     case 'homing':
       return 30;
+    case 'dash':
+      return 25;
+    case 'zigzag':
+      return 20;
     case 'teleport':
       return 20;
+    case 'orbit':
+      return 15;
     case 'straight':
       return 10;
+    case 'still':
+      return 0;
     default:
       return 0;
   }
@@ -158,8 +166,14 @@ function getAttackTypeScore(type) {
   switch (type) {
     case 'beam':
       return 50;
+    case 'spiral':
+      return 45;
     case 'spread':
       return 40;
+    case 'shotgunCone':
+      return 35;
+    case 'homingMissile':
+      return 35;
     case 'burst':
       return 30;
     case 'singleShot':
