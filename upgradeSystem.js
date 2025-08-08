@@ -1,3 +1,6 @@
+import { runNodes } from '@/skillTree/runTree.js'
+import { isUnlocked } from '@/skillTree/unlock.js'
+
 // Temporary upgrade system for between waves
 
 // Temporary upgrade types
@@ -66,10 +69,17 @@ const UPGRADE_DEFINITIONS = {
 
 // Generate random upgrade options
 export function generateUpgradeOptions(currentUpgrades, wave) {
-  const availableUpgrades = Object.keys(UPGRADE_DEFINITIONS).filter(type => {
+  let availableUpgrades = Object.keys(UPGRADE_DEFINITIONS).filter(type => {
     const def = UPGRADE_DEFINITIONS[type]
     const currentLevel = currentUpgrades[type] || 0
     return currentLevel < def.maxStacks
+  })
+
+  // Gate by run skill tree (e.g., minWave etc.)
+  availableUpgrades = availableUpgrades.filter(type => {
+    const node = runNodes.find(n => n.id === type)
+    if (!node) return true
+    return isUnlocked(node, {}, { wave })
   })
 
   // Ensure we have at least 3 options, or all available if less
@@ -131,4 +141,3 @@ export function calculateUpgradeEffects(upgrades) {
     extraHealth: upgrades[TEMP_UPGRADE_TYPES.EXTRA_HEALTH] || 0
   }
 }
-

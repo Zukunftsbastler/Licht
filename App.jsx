@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import MainMenu from './components/game/MainMenu.jsx'
 import PermanentUpgradesScreen from './components/game/PermanentUpgradesScreen.jsx'
 import UpgradeScreen from './components/game/UpgradeScreen.jsx'
@@ -23,6 +23,8 @@ import {
   applyUpgrade,
   calculateUpgradeEffects
 } from './upgradeSystem.js'
+import { metaNodes } from './skillTree/metaTree.js'
+import { getNodeCost, canBuy, purchase, indexById } from './skillTree/engine.js'
 import './App.css'
 
 const initialPermanentUpgrades = {
@@ -112,6 +114,28 @@ function App() {
   
   // Temporary upgrades (for current run)
   const [tempUpgrades, setTempUpgrades] = useState({ ...initialTempUpgrades })
+
+  // Meta Skill-Tree state
+  const [metaProgress, setMetaProgress] = useState(() => {
+    const saved = localStorage.getItem('metaProgress')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [metaStats, setMetaStats] = useState(() => {
+    const saved = localStorage.getItem('metaStats')
+    return saved ? JSON.parse(saved) : { totalSparksSpent: 0, achievements: [] }
+  })
+
+  const metaNodeIndex = useMemo(() => indexById(metaNodes), [])
+
+  const metaEffects = useMemo(() => {
+    const ml = (id) => (metaProgress[id] || 0);
+    return {
+      maxHealthBonus: ml('core_hp'),
+      pickupRadiusBonus: ml('utility_magnet') * 2,
+      econDropMultiplier: 1 + ml('econ_collector') * 0.05,
+      permaRegenBonus: ml('regen'),
+    };
+  }, [metaProgress])
   
   // Upgrade selection
   const [upgradeOptions, setUpgradeOptions] = useState([])
@@ -125,6 +149,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('totalLightSparks', totalLightSparks.toString())
   }, [totalLightSparks])
+
+  useEffect(() => {
+    localStorage.setItem('metaProgress', JSON.stringify(metaProgress))
+  }, [metaProgress])
+
+  useEffect(() => {
+    localStorage.setItem('metaStats', JSON.stringify(metaStats))
+  }, [metaStats])
 
   // Mouse move handler
   const handleMouseMove = useCallback((e) => {
@@ -182,7 +214,7 @@ function App() {
     setWaveComplete(false)
     setWaveStartTime(performance.now())
     
-    const baseHealth = 3 + Math.floor(permanentUpgrades.startHealth * 0.75)
+    const baseHealth = 3 + Math.floor(permanentUpgrades.startHealth * 0.75) + (metaEffects.maxHealthBonus || 0)
     const extraHealth = tempUpgrades.extra_health || 0
     const totalHealth = baseHealth + extraHealth
     
@@ -259,6 +291,31 @@ function App() {
     setPermanentUpgrades(prev => ({
       ...prev,
       [upgradeType]: prev[upgradeType] + 1
+    }))
+  }
+
+  // Buy meta skill tree node
+  const buyMetaNode = (nodeId) => {
+    const node = metaNodeIndex[nodeId]
+    if (!node) return
+
+    const ctx = {
+      totalLightSparks,
+      totalSparksSpent: metaStats?.totalSparksSpent || 0,
+      achievements: metaStats?.achievements || []
+    }
+
+    const check = canBuy(node, metaProgress, ctx)
+    if (!check.ok) return
+
+    const cost = getNodeCost(node, metaProgress, ctx)
+    if (totalLightSparks < cost) return
+
+    setTotalLightSparks(prev => prev - cost)
+    setMetaProgress(prev => purchase(prev, nodeId, node.maxLevel))
+    setMetaStats(prev => ({
+      ...prev,
+      totalSparksSpent: (prev.totalSparksSpent || 0) + cost
     }))
   }
 
@@ -412,8 +469,9 @@ function App() {
           parryActive,
         };
         
-        if (permanentUpgrades.healthRegen > 0 && newPlayer.health < newPlayer.maxHealth) {
-          const regenInterval = 3000 / permanentUpgrades.healthRegen
+        const permaRegenStacks = (permanentUpgrades.healthRegen || 0) + (metaEffects.permaRegenBonus || 0)
+        if (permaRegenStacks > 0 && newPlayer.health < newPlayer.maxHealth) {
+          const regenInterval = 3000 / permaRegenStacks
           if (currentTime % regenInterval < deltaTime * 1000) {
             newPlayer.health = Math.min(newPlayer.maxHealth, newPlayer.health + 1)
           }
@@ -583,7 +641,7 @@ function App() {
                     setScore(prev => prev + 25);
 
                     const baseSparkCount = 2;
-                    const sparkMultiplier = 1 + permanentUpgrades.sparkYield * 1.5;
+                    const sparkMultiplier = (1 + permanentUpgrades.sparkYield * 1.5) * (metaEffects.econDropMultiplier || 1);
                     const totalSparks = Math.floor(
                       baseSparkCount * sparkMultiplier
                     );
@@ -658,7 +716,7 @@ function App() {
         const newSparks = []
         let sparksCollected = 0
         
-        const baseCollectionRange = 20
+        const baseCollectionRange = 20 + (metaEffects.pickupRadiusBonus || 0)
         const magnetRange = baseCollectionRange + (tempUpgrades.spark_magnet * 15)
         
         prev.forEach(spark => {
@@ -734,7 +792,7 @@ function App() {
             scoreToAdd += 25;
 
             const baseSparkCount = 2;
-            const sparkMultiplier = 1 + permanentUpgrades.sparkYield * 1.5;
+            const sparkMultiplier = (1 + permanentUpgrades.sparkYield * 1.5) * (metaEffects.econDropMultiplier || 1);
             const totalSparks = Math.floor(baseSparkCount * sparkMultiplier);
 
             for (let i = 0; i < totalSparks; i++) {
@@ -842,6 +900,9 @@ function App() {
           onBuyUpgrade={buyPermanentUpgrade}
           totalLightSparks={totalLightSparks}
           permanentUpgrades={permanentUpgrades}
+          metaProgress={metaProgress}
+          metaStats={metaStats}
+          onBuyMetaNode={buyMetaNode}
         />;
       default:
         return null;

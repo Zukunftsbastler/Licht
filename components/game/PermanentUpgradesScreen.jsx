@@ -1,7 +1,8 @@
 import React from 'react';
 import { Button } from '@/components/ui/button.jsx';
+import SkillTreePanel from './SkillTreePanel.jsx';
 
-const PermanentUpgradesScreen = ({ onBackToMenu, onBuyUpgrade, totalLightSparks, permanentUpgrades }) => {
+const PermanentUpgradesScreen = ({ onBackToMenu, onBuyUpgrade, totalLightSparks, permanentUpgrades, metaProgress, metaStats, onBuyMetaNode }) => {
   const upgradeCosts = {
     shieldDuration: (permanentUpgrades.shieldDuration + 1) * 10,
     sparkYield: (permanentUpgrades.sparkYield + 1) * 15,
@@ -17,8 +18,9 @@ const PermanentUpgradesScreen = ({ onBackToMenu, onBuyUpgrade, totalLightSparks,
       <div className="text-lg md:text-xl mb-4 text-yellow-400">
         Verfügbare Licht-Funken: {totalLightSparks}
       </div>
-      
-      <div className="max-h-[60vh] md:max-h-none overflow-y-auto overscroll-contain">
+
+      <div className="max-h-[70vh] overflow-y-auto overscroll-contain pr-1">
+        <div className="max-h-[60vh] md:max-h-none overflow-y-auto overscroll-contain">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8 px-2">
           {/* Shield Duration */}
           <div className="bg-gray-900 p-4 rounded border border-cyan-400 touch-manipulation">
@@ -89,13 +91,25 @@ const PermanentUpgradesScreen = ({ onBackToMenu, onBuyUpgrade, totalLightSparks,
           </div>
         </div>
       </div>
+
+      <div className="h-px w-full bg-gray-700 my-6 md:my-8" />
+
+      <SkillTreePanel
+        totalLightSparks={totalLightSparks}
+        metaProgress={metaProgress}
+        metaStats={metaStats}
+        onBuyMetaNode={onBuyMetaNode}
+      />
+      <div className="sticky bottom-0 bg-black/80 border-t border-gray-700 mt-4 pt-3 pb-4">
+        <Button 
+          onClick={onBackToMenu}
+          className="bg-gray-600 hover:bg-gray-700 text-white font-bold px-6 md:px-8 py-3 text-lg md:text-xl touch-manipulation"
+        >
+          Zurück zum Hauptmenü
+        </Button>
+      </div>
+      </div>
       
-      <Button 
-        onClick={onBackToMenu}
-        className="bg-gray-600 hover:bg-gray-700 text-white font-bold px-6 md:px-8 py-3 text-lg md:text-xl touch-manipulation"
-      >
-        Zurück zum Hauptmenü
-      </Button>
     </div>
   );
 };
