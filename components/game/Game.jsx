@@ -11,6 +11,9 @@ const Game = ({
   canvasRef,
   canvasWidth,
   canvasHeight,
+  enemies,
+  currentWaveEnemies,
+  killedEnemies,
 }) => {
   return (
     <div className="relative">
@@ -21,6 +24,9 @@ const Game = ({
         lightSparks={lightSparks}
         permanentUpgrades={permanentUpgrades}
         tempUpgrades={tempUpgrades}
+        enemies={enemies}
+        currentWaveEnemies={currentWaveEnemies}
+        killedEnemies={killedEnemies}
       />
       <canvas
         ref={canvasRef}

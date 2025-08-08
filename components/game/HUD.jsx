@@ -1,6 +1,10 @@
 import React from 'react';
 
-const HUD = ({ player, wave, score, lightSparks, permanentUpgrades, tempUpgrades }) => {
+const HUD = ({ player, wave, score, lightSparks, permanentUpgrades, tempUpgrades, enemies, currentWaveEnemies, killedEnemies }) => {
+  const isEnemyKilled = (enemy) => {
+    return killedEnemies.includes(enemy.id);
+  };
+
   return (
     <>
       {/* HUD */}
@@ -42,6 +46,31 @@ const HUD = ({ player, wave, score, lightSparks, permanentUpgrades, tempUpgrades
         {tempUpgrades.parry_cooldown > 0 && <div>-{tempUpgrades.parry_cooldown * 15}% Parry-Cooldown</div>}
         {tempUpgrades.spark_magnet > 0 && <div>Licht-Magnet: {tempUpgrades.spark_magnet}</div>}
         {tempUpgrades.extra_health > 0 && <div>+{tempUpgrades.extra_health} Extra-Leben</div>}
+      </div>
+
+      {/* Enemy List */}
+      <div className="absolute bottom-4 left-4 text-cyan-400 font-mono text-sm z-10">
+        <div className="text-yellow-400">Gegner in dieser Welle:</div>
+        <table className="w-full text-left">
+          <thead>
+            <tr>
+              <th className="pr-4">Name</th>
+              <th className="pr-4">Leben</th>
+              <th className="pr-4">Tempo</th>
+              <th className="pr-4">Feuerrate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {currentWaveEnemies.map(enemy => (
+              <tr key={enemy.id} className={isEnemyKilled(enemy) ? 'line-through text-gray-500' : ''}>
+                <td>{enemy.body.type || 'Gegner'}</td>
+                <td>{enemy.body.health}</td>
+                <td>{enemy.movement.speed}</td>
+                <td>{(enemy.attack.fireRate / 1000).toFixed(2)}s</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );

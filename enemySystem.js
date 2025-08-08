@@ -136,6 +136,7 @@ export const ENEMY_TEMPLATES = {
 export function createEnemy(template, x, y, wave) {
   const enemy = {
     ...template,
+    id: Math.random(),
     x,
     y,
     wave,

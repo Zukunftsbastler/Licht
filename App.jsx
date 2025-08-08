@@ -76,8 +76,9 @@ function App() {
   
   // Wave management
   const [waveEnemies, setWaveEnemies] = useState([])
+  const [currentWaveEnemies, setCurrentWaveEnemies] = useState([])
   const [waveStartTime, setWaveStartTime] = useState(0)
-  const [enemiesKilled, setEnemiesKilled] = useState(0)
+  const [killedEnemies, setKilledEnemies] = useState([])
   const [waveComplete, setWaveComplete] = useState(false)
   
   // Player state
@@ -89,6 +90,7 @@ function App() {
     speed: PLAYER_SPEED,
     parryActive: false,
     parryCooldown: 0,
+    parryCooldownDuration: 0,
     parryRadius: PARRY_RADIUS,
     parryDuration: PARRY_DURATION
   })
@@ -151,7 +153,8 @@ function App() {
           ...prev,
           parryActive: true,
           parryDuration: modifiedParryDuration,
-          parryStartTime: performance.now()
+          parryStartTime: performance.now(),
+          parryCooldownDuration: 0
         }
       }
       return prev
@@ -175,7 +178,7 @@ function App() {
     setScore(0)
     setWave(1)
     setLightSparks(0)
-    setEnemiesKilled(0)
+    setKilledEnemies([])
     setWaveComplete(false)
     setWaveStartTime(performance.now())
     
@@ -199,6 +202,7 @@ function App() {
     // Initialize first wave
     const firstWaveEnemies = spawnWaveEnemies(1, CANVAS_WIDTH, CANVAS_HEIGHT)
     setWaveEnemies(firstWaveEnemies)
+    setCurrentWaveEnemies(firstWaveEnemies)
     setEnemies([])
     setProjectiles([])
     setSparks([])
@@ -227,11 +231,13 @@ function App() {
     
     const nextWave = wave + 1
     setWave(nextWave)
+    setKilledEnemies([])
     setWaveComplete(false)
     setWaveStartTime(performance.now())
     
     const nextWaveEnemies = spawnWaveEnemies(nextWave, CANVAS_WIDTH, CANVAS_HEIGHT)
     setWaveEnemies(nextWaveEnemies)
+    setCurrentWaveEnemies(nextWaveEnemies)
     setEnemies([])
     
     setGameState(GAME_STATES.PLAYING)
@@ -257,7 +263,7 @@ function App() {
   }
 
   // Render function
-  const render = useCallback(() => {
+  const render = useCallback((currentTime) => {
     const canvas = canvasRef.current
     if (!canvas) return
     
@@ -334,17 +340,31 @@ function App() {
       ctx.strokeStyle = '#ffffff'
       ctx.lineWidth = 1
       ctx.strokeRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight)
-      
+
+      // Draw Parry/Cooldown bar and handle shield transparency
+      const parryBarY = healthBarY + healthBarHeight + 4;
       if (player.parryActive) {
-        const radius = player.parryRadius * (1 + tempUpgrades.parry_size * 0.05)
-        ctx.strokeStyle = '#00ffff'
-        ctx.shadowColor = '#00ffff'
-        ctx.shadowBlur = 20
-        ctx.lineWidth = 3
-        ctx.beginPath()
-        ctx.arc(player.x, player.y, radius, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.shadowBlur = 0
+        const elapsed = currentTime - player.parryStartTime;
+        const percentage = Math.max(0, 1 - (elapsed / player.parryDuration));
+
+        // Draw shield circle
+        const radius = player.parryRadius * (1 + tempUpgrades.parry_size * 0.05);
+        ctx.globalAlpha = percentage; // Set transparency
+        ctx.strokeStyle = '#00ffff';
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 20;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1; // Reset transparency
+      } else if (player.parryCooldown > 0 && player.parryCooldownDuration > 0) {
+        const percentage = player.parryCooldown / player.parryCooldownDuration;
+        ctx.fillStyle = '#552222'; // Background
+        ctx.fillRect(healthBarX, parryBarY, healthBarWidth, healthBarHeight);
+        ctx.fillStyle = '#ff3333'; // Fill
+        ctx.fillRect(healthBarX, parryBarY, healthBarWidth * percentage, healthBarHeight);
       }
       
       particles.forEach(particle => {
@@ -368,26 +388,27 @@ function App() {
     
     if (gameState === GAME_STATES.PLAYING) {
       setPlayer(prev => {
-        let { parryActive, parryCooldown, parryDuration, parryStartTime } = prev;
-        let newParryCooldown = parryCooldown;
+        let { parryActive, parryCooldown, parryDuration, parryStartTime, parryCooldownDuration } = prev;
 
         if (parryActive) {
           const parryElapsed = currentTime - parryStartTime;
           if (parryElapsed >= parryDuration) {
             parryActive = false;
             const modifiedParryCooldown = PARRY_COOLDOWN * (1 - tempUpgrades.parry_cooldown * 0.15);
-            newParryCooldown = modifiedParryCooldown;
-            console.log('Parry deactivated. Cooldown started:', newParryCooldown);
+            parryCooldown = modifiedParryCooldown;
+            parryCooldownDuration = modifiedParryCooldown;
+            console.log('Parry deactivated. Cooldown started:', modifiedParryCooldown);
           }
         } else {
-          newParryCooldown = Math.max(0, parryCooldown - deltaTime * 1000);
+          parryCooldown = Math.max(0, parryCooldown - deltaTime * 1000);
         }
 
         const newPlayer = {
           ...prev,
           x: mousePos.x,
           y: mousePos.y,
-          parryCooldown: newParryCooldown,
+          parryCooldown,
+          parryCooldownDuration,
           parryActive,
         };
         
@@ -531,8 +552,8 @@ function App() {
 
                   const damagedEnemy = damageEnemy(enemy, projectile.damage);
 
-                  if (!damagedEnemy.alive) {
-                    setEnemiesKilled(prev => prev + 1);
+                  if (!damagedEnemy.alive && enemy.alive) {
+                    setKilledEnemies(prev => [...prev, damagedEnemy.id]);
                     setScore(prev => prev + 25);
 
                     const baseSparkCount = 2;
@@ -653,7 +674,7 @@ function App() {
       })
     }
     
-    render()
+    render(currentTime)
     gameLoopRef.current = requestAnimationFrame(gameLoop)
   }, [gameState, mousePos, render, player, tempUpgrades, gameOver, enemies, waveEnemies, waveStartTime, wave, waveComplete])
 
@@ -672,7 +693,6 @@ function App() {
     if (gameState !== GAME_STATES.PLAYING) return;
 
     let playerHealthLoss = 0;
-    let enemiesKilledCount = 0;
     let scoreToAdd = 0;
     const sparksToAdd = [];
     const enemiesToUpdate = new Map();
@@ -683,8 +703,8 @@ function App() {
           const damagedEnemy = damageEnemy(enemy, 100); // Instantly kill the enemy
           enemiesToUpdate.set(enemy, damagedEnemy);
 
-          if (!damagedEnemy.alive) {
-            enemiesKilledCount++;
+          if (!damagedEnemy.alive && enemy.alive) {
+            setKilledEnemies(prev => [...prev, damagedEnemy.id]);
             scoreToAdd += 25;
 
             const baseSparkCount = 2;
@@ -720,10 +740,6 @@ function App() {
       setSparks(prev => [...prev, ...sparksToAdd]);
     }
     
-    if (enemiesKilledCount > 0) {
-      setEnemiesKilled(prev => prev + enemiesKilledCount);
-    }
-
     if (scoreToAdd > 0) {
       setScore(prev => prev + scoreToAdd);
     }
@@ -773,6 +789,9 @@ function App() {
           canvasRef={canvasRef}
           canvasWidth={CANVAS_WIDTH}
           canvasHeight={CANVAS_HEIGHT}
+          enemies={enemies}
+          currentWaveEnemies={currentWaveEnemies}
+          killedEnemies={killedEnemies}
         />;
       case GAME_STATES.UPGRADE_SELECTION:
         return <UpgradeScreen 
