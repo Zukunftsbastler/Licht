@@ -1,8 +1,8 @@
 import React from 'react';
 import { Button } from '@/components/ui/button.jsx';
 
-const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSparks }) => {
-  const hasSaveGame = totalLightSparks > 0;
+const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSparks, permanentUpgrades }) => {
+  const hasSaveGame = Object.values(permanentUpgrades).some(level => level > 0);
 
   return (
     <div className="text-center">

@@ -776,7 +776,8 @@ function App() {
           onStartGame={startGame}
           onStartNewGame={startNewGame}
           onShowUpgrades={() => setGameState(GAME_STATES.PERMANENT_UPGRADES)}
-          totalLightSparks={totalLightSparks} 
+          totalLightSparks={totalLightSparks}
+          permanentUpgrades={permanentUpgrades}
         />;
       case GAME_STATES.PLAYING:
         return <Game 

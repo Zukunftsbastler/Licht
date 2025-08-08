@@ -77,6 +77,7 @@ export function reflectProjectile(projectile, player) {
     // Mark as reflected by player
     projectile.fromPlayer = true
     projectile.damage = 1
+    projectile.color = '#ffff00' // Change color to player's color
   }
 }
 
@@ -101,6 +102,13 @@ export function getRandomEdgePosition(width, height) {
     default:
       return { x: width / 2, y: -50 }
   }
+}
+
+// Generate random position inside canvas
+export function getRandomInsidePosition(width, height, margin = 50) {
+  const x = margin + Math.random() * (width - 2 * margin);
+  const y = margin + Math.random() * (height - 2 * margin);
+  return { x, y };
 }
 
 // Linear interpolation

@@ -1,6 +1,6 @@
 // Enemy system for Licht-Käfer Roguelite
 
-import { distance, getRandomEdgePosition } from './gameUtils.js'
+import { distance, getRandomEdgePosition, getRandomInsidePosition } from './gameUtils.js'
 
 // Seeded random number generator for consistent colors
 function seededRandom(seed) {
@@ -56,6 +56,7 @@ export const PROJECTILE_TYPES = {
 export const ENEMY_TEMPLATES = {
   BASIC: {
     body: {
+      type: 'Irrlicht',
       radius: 10,
       health: 1,
       color: '#ff0066',
@@ -74,6 +75,7 @@ export const ENEMY_TEMPLATES = {
   },
   FAST: {
     body: {
+      type: 'Raser',
       radius: 8,
       health: 1,
       color: 'purple',
@@ -92,6 +94,7 @@ export const ENEMY_TEMPLATES = {
   },
   BURST: {
     body: {
+      type: 'Pulsar',
       radius: 12,
       health: 2,
       color: '#8800ff',
@@ -112,6 +115,7 @@ export const ENEMY_TEMPLATES = {
   },
   SPREAD: {
     body: {
+      type: 'Fächer-Klaue',
       radius: 15,
       health: 3,
       color: '#ff3300',
@@ -299,7 +303,9 @@ export function spawnWaveEnemies(wave, canvasWidth, canvasHeight) {
   const enemies = [];
 
   config.enemies.forEach((template, index) => {
-    const spawnPos = getRandomEdgePosition(canvasWidth, canvasHeight);
+    const spawnPos = template.movement.type === 'still'
+      ? getRandomInsidePosition(canvasWidth, canvasHeight)
+      : getRandomEdgePosition(canvasWidth, canvasHeight);
     const enemy = createEnemy(template, spawnPos.x, spawnPos.y, wave);
 
     // Stagger spawn times
