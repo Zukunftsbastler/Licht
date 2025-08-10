@@ -367,6 +367,10 @@ export function createEnemy(template, x, y, wave) {
     moveTimer: 0,
     alive: true,
     spawned: true,
+    dirAngle: 0,
+    animTime: 0,
+    vx: 0,
+    vy: 0,
   }
 
   // Initialize per-type state
@@ -403,6 +407,7 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
   if (!enemy.alive) return enemy
 
   // Movement
+  let vx = 0, vy = 0
   switch (enemy.movement.type) {
     case 'still':
       // no movement
@@ -413,8 +418,10 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
       const dy = player.y - enemy.y
       const distHoming = Math.hypot(dx, dy)
       if (distHoming > 5) {
-        enemy.x += (dx / distHoming) * enemy.movement.speed * deltaTime
-        enemy.y += (dy / distHoming) * enemy.movement.speed * deltaTime
+        vx = (dx / distHoming) * enemy.movement.speed
+        vy = (dy / distHoming) * enemy.movement.speed
+        enemy.x += vx * deltaTime
+        enemy.y += vy * deltaTime
       }
       break
     }
@@ -433,8 +440,8 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
       enemy.moveTimer += deltaTime
       const offset = Math.sin(enemy.moveTimer * (enemy.movement.frequency || 2)) * (enemy.movement.amplitude || 60)
 
-      const vx = nx * enemy.movement.speed + px * offset
-      const vy = ny * enemy.movement.speed + py * offset
+      vx = nx * enemy.movement.speed + px * offset
+      vy = ny * enemy.movement.speed + py * offset
 
       enemy.x += vx * deltaTime
       enemy.y += vy * deltaTime
@@ -447,6 +454,8 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
       enemy.orbitAngle += angularSpeed * deltaTime
       enemy.x = player.x + Math.cos(enemy.orbitAngle) * r
       enemy.y = player.y + Math.sin(enemy.orbitAngle) * r
+      vx = -Math.sin(enemy.orbitAngle) * angularSpeed * r
+      vy = Math.cos(enemy.orbitAngle) * angularSpeed * r
       break
     }
 
@@ -459,8 +468,10 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
         const dy = player.y - enemy.y
         const dist = Math.hypot(dx, dy) || 1
         const spd = (enemy.movement.speed || 160) * 1.5
-        enemy.x += (dx / dist) * spd * deltaTime
-        enemy.y += (dy / dist) * spd * deltaTime
+        vx = (dx / dist) * spd
+        vy = (dy / dist) * spd
+        enemy.x += vx * deltaTime
+        enemy.y += vy * deltaTime
 
         if (enemy.dashTime >= (enemy.movement.dashDuration || 500)) {
           enemy.dashing = false
@@ -501,8 +512,10 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
           const dy = enemy.targetY - enemy.y
           const dist = Math.hypot(dx, dy)
           if (dist > 5) {
-            enemy.x += (dx / dist) * (enemy.movement.speed * 0.5) * deltaTime
-            enemy.y += (dy / dist) * (enemy.movement.speed * 0.5) * deltaTime
+            vx = (dx / dist) * (enemy.movement.speed * 0.5)
+            vy = (dy / dist) * (enemy.movement.speed * 0.5)
+            enemy.x += vx * deltaTime
+            enemy.y += vy * deltaTime
           }
         }
       }
@@ -560,12 +573,27 @@ export function updateEnemy(enemy, player, deltaTime, currentTime, canvasWidth, 
       const dist = Math.hypot(dx, dy)
 
       if (dist > 5) {
-        enemy.x += (dx / dist) * enemy.movement.speed * deltaTime
-        enemy.y += (dy / dist) * enemy.movement.speed * deltaTime
+        vx = (dx / dist) * enemy.movement.speed
+        vy = (dy / dist) * enemy.movement.speed
+        enemy.x += vx * deltaTime
+        enemy.y += vy * deltaTime
       }
       break
     }
   }
+
+  // Direction and animation timing
+  const spdMag = Math.hypot(vx, vy)
+  if (spdMag > 0.001) {
+    enemy.dirAngle = Math.atan2(vy, vx)
+  } else {
+    const ddx = player.x - enemy.x
+    const ddy = player.y - enemy.y
+    enemy.dirAngle = Math.atan2(ddy, ddx)
+  }
+  enemy.vx = vx
+  enemy.vy = vy
+  enemy.animTime = (enemy.animTime || 0) + deltaTime * (0.6 + Math.min(2, spdMag / 80))
 
   // Shooting behavior
   if (currentTime - enemy.lastShot > enemy.attack.fireRate) {

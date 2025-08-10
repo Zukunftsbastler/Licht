@@ -16,8 +16,11 @@ import {
   updateEnemy,
   createEnemyProjectile,
   damageEnemy,
-  spawnWaveEnemies
+  spawnWaveEnemies,
+  ENEMY_TEMPLATES
 } from './enemySystem.js'
+import { loadActorSprites, drawSprite, getFrameIndex } from './sprites/spriteRenderer.js'
+import { generateForestBackgroundCanvas } from './background/generator.js'
 import {
   generateUpgradeOptions,
   applyUpgrade,
@@ -98,7 +101,10 @@ function App() {
     parryCooldown: 0,
     parryCooldownDuration: 0,
     parryRadius: PARRY_RADIUS,
-    parryDuration: PARRY_DURATION
+    parryDuration: PARRY_DURATION,
+    dirAngle: 0,
+    animTime: 0,
+    size: PLAYER_SIZE
   })
   
   // Game objects
@@ -143,6 +149,9 @@ function App() {
   
   // Upgrade selection
   const [upgradeOptions, setUpgradeOptions] = useState([])
+  // Assets
+  const [spriteAssets, setSpriteAssets] = useState(null)
+  const [bgCanvas, setBgCanvas] = useState(null)
 
   // Save permanent upgrades to localStorage
   useEffect(() => {
@@ -161,6 +170,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('metaStats', JSON.stringify(metaStats))
   }, [metaStats])
+
+  useEffect(() => {
+    // Preload sprites and generate background once
+    const actorTypes = ['player', ...new Set(Object.values(ENEMY_TEMPLATES).map(t => t.body?.type).filter(Boolean))]
+    loadActorSprites(actorTypes).then(setSpriteAssets)
+    const { canvas } = generateForestBackgroundCanvas(CANVAS_WIDTH, CANVAS_HEIGHT, 20250811)
+    setBgCanvas(canvas)
+  }, [])
 
   // Mouse move handler
   const handleMouseMove = useCallback((e) => {
@@ -241,7 +258,10 @@ function App() {
       parryCooldownDuration: 0,
       parryRadius: PARRY_RADIUS,
       parryDuration: PARRY_DURATION * (1 + permanentUpgrades.shieldDuration * 0.3),
-      parryStartTime: 0
+      parryStartTime: 0,
+      dirAngle: 0,
+      animTime: 0,
+      size: PLAYER_SIZE
     })
     
     // Initialize first wave
@@ -339,8 +359,13 @@ function App() {
     
     const ctx = canvas.getContext('2d')
     
-    ctx.fillStyle = '#000000'
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+    if (bgCanvas) {
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(bgCanvas, 0, 0)
+    } else {
+      ctx.fillStyle = '#000000'
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+    }
     
     if (gameState === GAME_STATES.PLAYING) {
       sparks.forEach(spark => {
@@ -355,13 +380,22 @@ function App() {
       })
       
       enemies.forEach(enemy => {
-        ctx.fillStyle = enemy.body.color;
-        ctx.shadowColor = enemy.body.color;
-        ctx.shadowBlur = 8;
-        ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, enemy.body.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        const type = enemy.body?.type;
+        const sprite = spriteAssets?.actors?.[type];
+        if (sprite) {
+          const frame = getFrameIndex(enemy.animTime || 0, 8);
+          const angle = enemy.dirAngle || 0;
+          const size = (enemy.body?.radius || 10) * 2;
+          drawSprite(ctx, sprite, enemy.x, enemy.y, angle, frame, size);
+        } else {
+          ctx.fillStyle = enemy.body.color;
+          ctx.shadowColor = enemy.body.color;
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(enemy.x, enemy.y, enemy.body.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
       });
       
       projectiles.forEach(projectile => {
@@ -378,18 +412,26 @@ function App() {
         ctx.shadowBlur = 0;
       });
       
-      ctx.fillStyle = '#ffff00'
-      ctx.shadowColor = '#ffff00'
-      ctx.shadowBlur = 15
-      ctx.beginPath()
-      ctx.arc(player.x, player.y, PLAYER_SIZE, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.shadowBlur = 0
+      const pr = player.size || PLAYER_SIZE
+      const pSprite = spriteAssets?.actors?.['player']
+      if (pSprite) {
+        const pFrame = getFrameIndex(player.animTime || 0, 10)
+        const pAngle = player.dirAngle || 0
+        drawSprite(ctx, pSprite, player.x, player.y, pAngle, pFrame, pr * 2)
+      } else {
+        ctx.fillStyle = '#ffff00'
+        ctx.shadowColor = '#ffff00'
+        ctx.shadowBlur = 15
+        ctx.beginPath()
+        ctx.arc(player.x, player.y, pr, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.shadowBlur = 0
+      }
       
       const healthBarWidth = 40
       const healthBarHeight = 6
       const healthBarX = player.x - healthBarWidth / 2
-      const healthBarY = player.y - PLAYER_SIZE - 15
+      const healthBarY = player.y - pr - 15
       
       ctx.fillStyle = '#333333'
       ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight)
@@ -449,7 +491,7 @@ function App() {
         ctx.shadowBlur = 0
       })
     }
-  }, [gameState, player, enemies, projectiles, sparks, particles, tempUpgrades])
+  }, [gameState, player, enemies, projectiles, sparks, particles, tempUpgrades, spriteAssets, bgCanvas])
 
   // Game loop
   const gameLoop = useCallback((currentTime) => {
@@ -473,6 +515,16 @@ function App() {
           parryCooldown = Math.max(0, parryCooldown - deltaTime * 1000);
         }
 
+        const dx = mousePos.x - prev.x;
+        const dy = mousePos.y - prev.y;
+        let dirAngle = prev.dirAngle || 0;
+        const moveDist = Math.hypot(dx, dy);
+        if (moveDist > 0.001) {
+          dirAngle = Math.atan2(dy, dx);
+        }
+        const speedPixPerSec = moveDist / Math.max(deltaTime, 1e-6);
+        const animInc = deltaTime * (0.6 + Math.min(2, speedPixPerSec / 80));
+
         const newPlayer = {
           ...prev,
           x: mousePos.x,
@@ -480,6 +532,8 @@ function App() {
           parryCooldown,
           parryCooldownDuration,
           parryActive,
+          dirAngle,
+          animTime: (prev.animTime || 0) + animInc,
         };
         
         const permaRegenStacks = (permanentUpgrades.healthRegen || 0) + (metaEffects.permaRegenBonus || 0)
