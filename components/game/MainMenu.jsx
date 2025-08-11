@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button.jsx';
 
 const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSparks, permanentUpgrades }) => {
   const hasSaveGame = Object.values(permanentUpgrades).some(level => level > 0);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   return (
     <div className="text-center">
@@ -17,25 +18,44 @@ const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSpark
         Pariere die Schatten-Stacheln der aggressiven Schatten-Motten mit deinem Licht-Impuls 
         und sammle Licht-Funken für permanente Upgrades.
       </p>
-      <div className="space-y-4">
-        <Button 
-          onClick={onStartGame}
-          className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold px-8 py-3 text-xl"
-        >
-          Neuer Run
-        </Button>
-        <Button 
-          onClick={onStartNewGame}
-          className="bg-green-600 hover:bg-green-700 text-black font-bold px-8 py-3 text-xl"
-        >
-          Neues Spiel (Hard Reset)
-        </Button>
-        <Button 
-          onClick={onShowUpgrades}
-          className="bg-cyan-600 hover:bg-cyan-700 text-black font-bold px-8 py-3 text-xl"
-        >
-          Upgrades ({totalLightSparks} Licht-Funken)
-        </Button>
+      <div className="space-y-6">
+        <div className="flex items-center justify-center gap-4 flex-wrap">
+          <Button 
+            onClick={onShowUpgrades}
+            className="bg-cyan-600 hover:bg-cyan-700 text-black font-bold px-8 py-3 text-xl"
+          >
+            Shop / Upgrades ({totalLightSparks} Licht-Funken)
+          </Button>
+          <Button 
+            onClick={onStartGame}
+            className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-8 py-3 text-xl"
+          >
+            Neuer Run
+          </Button>
+        </div>
+
+        <div className="mt-8 max-w-md mx-auto p-4 rounded border border-red-800/40 bg-black/30">
+          <h3 className="text-red-400 text-sm uppercase tracking-wider mb-2">Gefährlicher Bereich</h3>
+          <p className="text-xs text-red-200/70 mb-3">
+            Hard Reset setzt permanente Upgrades und Meta‑Fortschritt zurück.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setConfirmReset(v => !v)}
+              className="text-red-300 border border-red-600 hover:bg-red-900/30 px-4 py-2 text-sm rounded bg-transparent"
+            >
+              Neues Spiel (Hard Reset)
+            </Button>
+            {confirmReset && (
+              <Button
+                onClick={onStartNewGame}
+                className="bg-red-700 hover:bg-red-800 text-white font-bold px-4 py-2 text-sm rounded"
+              >
+                Ja, alles zurücksetzen
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

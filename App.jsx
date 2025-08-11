@@ -21,6 +21,7 @@ import {
 } from './enemySystem.js'
 import { loadActorSprites, drawSprite, getFrameIndex } from './sprites/spriteRenderer.js'
 import { generateForestBackgroundCanvas } from './background/generator.js'
+import { playMusic, playSfx } from './audio/audio.js'
 import {
   generateUpgradeOptions,
   applyUpgrade,
@@ -178,7 +179,19 @@ function App() {
     const { canvas } = generateForestBackgroundCanvas(CANVAS_WIDTH, CANVAS_HEIGHT, 20250811)
     setBgCanvas(canvas)
   }, [])
-
+  
+  // Music state binding
+  useEffect(() => {
+    if (gameState === GAME_STATES.PLAYING) {
+      playMusic('run')
+    } else if (gameState === GAME_STATES.UPGRADE_SELECTION) {
+      playMusic('menu')
+    } else {
+      // MENU, PERMANENT_UPGRADES, GAME_OVER
+      playMusic('menu')
+    }
+  }, [gameState])
+  
   // Mouse move handler
   const handleMouseMove = useCallback((e) => {
     const canvas = canvasRef.current
@@ -201,6 +214,7 @@ function App() {
         const baseParryDuration = PARRY_DURATION * (1 + permanentUpgrades.shieldDuration * 0.3)
         const modifiedParryDuration = baseParryDuration * (1 + tempUpgrades.parry_duration * 0.1)
         console.log('Parry activated. Duration:', modifiedParryDuration);
+        playSfx('player/parry_activate', { volume: 0.8 })
         
         return {
           ...prev,
@@ -238,6 +252,7 @@ function App() {
     setKilledEnemies([])
     setWaveComplete(false)
     setWaveStartTime(performance.now())
+    playSfx('wave/start', { volume: 0.6 })
     
     // Reset all temporary (run) upgrades BEFORE computing player stats
     const resetTempUpgrades = { ...initialTempUpgrades }
@@ -299,6 +314,7 @@ function App() {
     setKilledEnemies([])
     setWaveComplete(false)
     setWaveStartTime(performance.now())
+    playSfx(nextWave % 5 === 0 ? 'boss/intro' : 'wave/start', { volume: nextWave % 5 === 0 ? 0.8 : 0.6 })
     
     const nextWaveEnemies = spawnWaveEnemies(nextWave, CANVAS_WIDTH, CANVAS_HEIGHT)
     setWaveEnemies(nextWaveEnemies)
@@ -561,6 +577,7 @@ function App() {
         prev.forEach(enemy => {
           if (!enemy.spawned && currentTime - waveStartTime > enemy.spawnDelay) {
             enemy.spawned = true
+            playSfx('enemy/spawn', { volume: 0.35 })
             setEnemies(prevEnemies => [...prevEnemies, enemy])
           } else if (!enemy.spawned) {
             remainingWaveEnemies.push(enemy)
@@ -601,6 +618,8 @@ function App() {
         
         const options = generateUpgradeOptions(tempUpgrades, wave)
         setUpgradeOptions(options)
+        playSfx('wave/clear', { volume: 0.7 })
+        playSfx('ui/upgrade_open', { volume: 0.6 })
         
         setTimeout(() => {
           setGameState(GAME_STATES.UPGRADE_SELECTION)
@@ -673,6 +692,7 @@ function App() {
             const parryRadius = player.parryRadius * upgradeEffects.parrySizeMultiplier
             if (distance(projectile, player) < parryRadius) {
               reflectProjectile(projectile, player)
+              playSfx('player/parry_reflect', { volume: 0.7 })
               
               for (let i = 0; i < 5; i++) {
                 newParticles.push(createParticle(
@@ -704,6 +724,8 @@ function App() {
                   const damagedEnemy = damageEnemy(enemy, projectile.damage);
 
                   if (!damagedEnemy.alive && enemy.alive) {
+                    const deathKey = (enemy.body?.radius || 10) >= 12 ? 'enemy/death_medium' : 'enemy/death_small';
+                    playSfx(deathKey, { volume: 0.7 });
                     setKilledEnemies(prev => [...prev, damagedEnemy.id]);
                     setScore(prev => prev + 25);
 
@@ -759,6 +781,7 @@ function App() {
         })
         
         if (playerHit) {
+          playSfx('player/hit', { volume: 0.8 })
           setPlayer(prev => {
             const newHealth = prev.health - 1
             if (newHealth <= 0) {
@@ -819,6 +842,7 @@ function App() {
           const multiplier = Math.random() < doubleSparkChance ? 2 : 1
           setLightSparks(prev => prev + sparksCollected * multiplier)
           setScore(prev => prev + sparksCollected * 5 * multiplier)
+          playSfx('player/spark_pickup', { volume: 0.5 })
         }
         
         return newSparks
@@ -855,6 +879,8 @@ function App() {
           enemiesToUpdate.set(enemy, damagedEnemy);
 
           if (!damagedEnemy.alive && enemy.alive) {
+            const deathKey = (enemy.body?.radius || 10) >= 12 ? 'enemy/death_medium' : 'enemy/death_small';
+            playSfx(deathKey, { volume: 0.7 });
             setKilledEnemies(prev => [...prev, damagedEnemy.id]);
             scoreToAdd += 25;
 
