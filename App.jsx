@@ -21,7 +21,7 @@ import {
 } from './enemySystem.js'
 import { loadActorSprites, drawSprite, getFrameIndex } from './sprites/spriteRenderer.js'
 import { generateForestBackgroundCanvas } from './background/generator.js'
-import { playMusic, playSfx } from './audio/audio.js'
+import { playMusic, playSfx, unlockAudio } from './audio/audio.js'
 import {
   generateUpgradeOptions,
   applyUpgrade,
@@ -178,6 +178,21 @@ function App() {
     loadActorSprites(actorTypes).then(setSpriteAssets)
     const { canvas } = generateForestBackgroundCanvas(CANVAS_WIDTH, CANVAS_HEIGHT, 20250811)
     setBgCanvas(canvas)
+  }, [])
+  
+  // Ensure audio is unlocked on first real user gesture (helps SFX on some browsers)
+  useEffect(() => {
+    const unlockOnce = () => {
+      try { unlockAudio(); } catch {}
+      window.removeEventListener('pointerdown', unlockOnce);
+      window.removeEventListener('keydown', unlockOnce);
+    };
+    window.addEventListener('pointerdown', unlockOnce, { passive: true });
+    window.addEventListener('keydown', unlockOnce, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockOnce);
+      window.removeEventListener('keydown', unlockOnce);
+    };
   }, [])
   
   // Music state binding

@@ -6,6 +6,15 @@
  */
 import { SFX_MANIFEST } from './sfx-manifest.js'
 
+const DEBUG = true;
+
+function encodePathPreserveSlashes(raw) {
+  if (!raw) return raw;
+  const parts = raw.split('/');
+  // Keep leading "" for absolute path, encode each segment after the first
+  return parts.map((seg, i) => (i === 0 ? seg : encodeURIComponent(seg))).join('/');
+}
+
 const music = {
   current: null,
   targetKind: null,
@@ -16,23 +25,90 @@ const music = {
 };
 
 const sfxCache = new Map();
+const activeSfx = new Set();
 let audioUnlocked = false;
+
+// Keep SFX elements attached to DOM to satisfy some browser policies
+function getSfxContainer() {
+  if (typeof document === 'undefined') return null;
+  let el = document.getElementById('sfx-container');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sfx-container';
+    el.style.position = 'fixed';
+    el.style.pointerEvents = 'none';
+    el.style.opacity = '0';
+    el.style.width = '0';
+    el.style.height = '0';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+let audioCtx = null;
+
+/** Create or get a shared WebAudio context (for low-latency, reliable SFX). */
+function getOrCreateCtx() {
+  if (typeof window === 'undefined') return null;
+  try {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+  } catch {}
+  return audioCtx;
+}
+
+/** Cache for decoded SFX buffers (key -> AudioBuffer). */
+const sfxBufferCache = new Map();
+
+/** Load and decode SFX for a logical key using WebAudio. */
+async function loadSfxBufferForKey(key) {
+  const ctx = getOrCreateCtx();
+  if (!ctx) return null;
+  if (sfxBufferCache.has(key)) return sfxBufferCache.get(key);
+
+  const cands = sfxCandidates(key);
+  for (const raw of cands) {
+    try {
+      const url = encodePathPreserveSlashes(raw);
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const arr = await res.arrayBuffer();
+      const buf = await ctx.decodeAudioData(arr.slice(0));
+      if (buf) {
+        sfxBufferCache.set(key, buf);
+        return buf;
+      }
+    } catch (e) {
+      if (DEBUG) console.warn('[SFX] buffer load failed', raw, e);
+    }
+  }
+  return null;
+}
 
 /** Try multiple candidate paths, resolve first playable Audio element. */
 async function loadAudioAny(candidates, loop = false) {
-  for (const src of candidates) {
+  for (const raw of candidates) {
     try {
+      const src = encodePathPreserveSlashes(raw);
+      // Verify the asset exists to avoid 404s that cause play() rejections
+      const res = await fetch(src, { method: 'HEAD' });
+      if (!res.ok) {
+        if (DEBUG) console.warn('[SFX] HEAD not ok', src, res.status);
+        continue;
+      }
       const a = new Audio(src);
       a.loop = loop;
       a.preload = 'auto';
-      // Try to fetch metadata quickly to detect 404 early
-      await a.load?.();
-      // Some browsers won't reject until play(); accept lazily.
+      if (DEBUG) console.log('[SFX] candidate ok', src);
       return a;
-    } catch {
+    } catch (e) {
+      if (DEBUG) console.warn('[SFX] candidate failed', raw, e);
       // next
     }
   }
+  if (DEBUG) console.warn('[SFX] no candidate playable', candidates);
   return null;
 }
 
@@ -105,6 +181,12 @@ export function unlockAudio() {
     const a = new Audio();
     a.muted = true;
     a.play().catch(() => {});
+  } catch {}
+  try {
+    const ctx = getOrCreateCtx();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
   } catch {}
   audioUnlocked = true;
 }
@@ -195,23 +277,87 @@ export function stopMusic() {
 export async function playSfx(key, opts = {}) {
   try {
     unlockAudio();
+
+    // Preferred path: WebAudio (more reliable across browsers for rapid/overlapping SFX)
+    try {
+      const ctx = getOrCreateCtx();
+      if (ctx) {
+        const buffer = await loadSfxBufferForKey(key);
+        if (buffer) {
+          const src = ctx.createBufferSource();
+          src.buffer = buffer;
+          if (typeof opts.rate === 'number') src.playbackRate.value = opts.rate;
+
+          const gain = ctx.createGain();
+          gain.gain.value = typeof opts.volume === 'number' ? opts.volume : 1.0;
+
+          src.connect(gain).connect(ctx.destination);
+          src.start(0);
+          if (DEBUG) console.log('[SFX] play (webaudio)', key, 'vol=', gain.gain.value);
+          return;
+        }
+      }
+    } catch (e) {
+      if (DEBUG) console.warn('[SFX] WebAudio path failed', key, e);
+    }
+
+    // Fallback: HTMLAudioElement
     let entry = sfxCache.get(key);
     if (!entry) {
-      const audio = await loadAudioAny(sfxCandidates(key), false);
-      if (!audio) return;
+      const cands = sfxCandidates(key);
+      const audio = await loadAudioAny(cands, false);
+      if (!audio) {
+        if (DEBUG) console.warn('[SFX] not found', key, cands);
+        return;
+      }
       sfxCache.set(key, { audio });
       entry = { audio };
     }
     const { audio } = entry;
-    // Create a fresh HTMLAudioElement to allow overlapping plays (cloneNode may lose src)
-    const node = new Audio(audio.currentSrc || audio.src);
+    const srcUrl = audio.currentSrc || audio.src;
+    const node = new Audio(srcUrl);
     node.preload = 'auto';
-    node.volume = typeof opts.volume === 'number' ? opts.volume : 0.9;
+    node.autoplay = true;
+    node.muted = false;
+    node.volume = typeof opts.volume === 'number' ? opts.volume : 1.0;
     if (typeof opts.rate === 'number' && node.playbackRate !== undefined) {
       node.playbackRate = opts.rate;
     }
-    await node.play().catch(() => {});
-  } catch {
-    // ignore if missing or blocked
+    try { node.currentTime = 0; } catch {}
+
+    const container = getSfxContainer();
+    if (container) {
+      try { container.appendChild(node); } catch {}
+    }
+    activeSfx.add(node);
+    node.onended = node.onerror = () => {
+      activeSfx.delete(node);
+      try {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      } catch {}
+    };
+    if (DEBUG) console.log('[SFX] play (htmlaudio)', key, node.src, 'vol=', node.volume);
+
+    let played = false;
+    try {
+      await node.play();
+      played = true;
+    } catch (e) {
+      if (DEBUG) console.warn('[SFX] play failed (html first try)', key, e);
+    }
+    if (!played) {
+      await new Promise((resolve) => {
+        const onReady = async () => {
+          try { await node.play(); } catch (e2) {
+            if (DEBUG) console.warn('[SFX] play failed (html retry)', key, e2);
+          }
+          resolve();
+        };
+        node.addEventListener('canplaythrough', onReady, { once: true });
+        try { node.load(); } catch {}
+      });
+    }
+  } catch (e) {
+    if (DEBUG) console.warn('[SFX] exception', key, e);
   }
 }
