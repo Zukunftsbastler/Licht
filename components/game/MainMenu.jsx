@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button.jsx';
 
-const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSparks, permanentUpgrades }) => {
+const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSparks, permanentUpgrades, highestWaveReached }) => {
   const hasSaveGame = Object.values(permanentUpgrades).some(level => level > 0);
   const [confirmReset, setConfirmReset] = useState(false);
+  const startWaveOptions = useMemo(() => {
+    const options = [1];
+    const maxMultiple = Math.floor((highestWaveReached || 0) / 5) * 5;
+    for (let w = 5; w <= maxMultiple; w += 5) options.push(w);
+    return options;
+  }, [highestWaveReached]);
+  const [selectedStartWave, setSelectedStartWave] = useState(1);
+  useEffect(() => {
+    setSelectedStartWave(startWaveOptions[startWaveOptions.length - 1] || 1);
+  }, [startWaveOptions]);
 
   return (
     <div className="text-center">
@@ -26,8 +36,22 @@ const MainMenu = ({ onStartGame, onStartNewGame, onShowUpgrades, totalLightSpark
           >
             Shop / Upgrades ({totalLightSparks} Licht-Funken)
           </Button>
+
+          <div className="flex items-center gap-2 bg-black/30 border border-cyan-700 px-3 py-2 rounded">
+            <label className="text-cyan-300 text-sm">Startwelle</label>
+            <select
+              value={selectedStartWave}
+              onChange={(e) => setSelectedStartWave(parseInt(e.target.value, 10))}
+              className="bg-black/40 border border-cyan-600 text-cyan-200 px-2 py-1 rounded"
+            >
+              {startWaveOptions.map(w => (
+                <option key={w} value={w}>Welle {w}</option>
+              ))}
+            </select>
+          </div>
+
           <Button 
-            onClick={onStartGame}
+            onClick={() => onStartGame(selectedStartWave)}
             className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-8 py-3 text-xl"
           >
             Neuer Run

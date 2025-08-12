@@ -9,8 +9,7 @@ import {
   createParticle, 
   createLightSpark, 
   reflectProjectile,
-  isInBounds,
-  immobilizePlayer
+  isInBounds
 } from './gameUtils.js'
 import {
   updateEnemy,
@@ -60,6 +59,7 @@ const PLAYER_SPEED = 200
 const PARRY_COOLDOWN = 500
 const PARRY_DURATION = 250
 const PARRY_RADIUS = 40
+const TOUCH_INVULN_MS = 600
 
 // Game states
 const GAME_STATES = {
@@ -83,6 +83,9 @@ function App() {
   const [totalLightSparks, setTotalLightSparks] = useState(() => {
     return parseInt(localStorage.getItem('totalLightSparks') || '0')
   })
+  const [highestWaveReached, setHighestWaveReached] = useState(() => {
+    return parseInt(localStorage.getItem('highestWaveReached') || '0')
+  })
   
   // Wave management
   const [waveEnemies, setWaveEnemies] = useState([])
@@ -105,7 +108,8 @@ function App() {
     parryDuration: PARRY_DURATION,
     dirAngle: 0,
     animTime: 0,
-    size: PLAYER_SIZE
+    size: PLAYER_SIZE,
+    invulnerableUntil: 0
   })
   
   // Game objects
@@ -171,6 +175,15 @@ function App() {
   useEffect(() => {
     localStorage.setItem('metaStats', JSON.stringify(metaStats))
   }, [metaStats])
+
+  useEffect(() => {
+    // Persist highest wave reached; update whenever current wave increases
+    const saved = parseInt(localStorage.getItem('highestWaveReached') || '0');
+    if (wave > saved) {
+      localStorage.setItem('highestWaveReached', wave.toString());
+      setHighestWaveReached(wave);
+    }
+  }, [wave])
 
   useEffect(() => {
     // Preload sprites and generate background once
@@ -248,10 +261,12 @@ function App() {
     localStorage.removeItem('permanentUpgrades');
     localStorage.removeItem('metaProgress');
     localStorage.removeItem('metaStats');
+    localStorage.removeItem('highestWaveReached');
     setTotalLightSparks(0);
     setPermanentUpgrades({ ...initialPermanentUpgrades });
     setMetaProgress({ ...initialMetaProgress });
     setMetaStats({ ...initialMetaStats });
+    setHighestWaveReached(0);
     
     setTimeout(() => {
       startGame();
@@ -259,10 +274,10 @@ function App() {
   };
 
   // Start new game
-  const startGame = () => {
+  const startGame = (startingWave = 1) => {
     setGameState(GAME_STATES.PLAYING)
     setScore(0)
-    setWave(1)
+    setWave(startingWave)
     setLightSparks(0)
     setKilledEnemies([])
     setWaveComplete(false)
@@ -291,11 +306,12 @@ function App() {
       parryStartTime: 0,
       dirAngle: 0,
       animTime: 0,
-      size: PLAYER_SIZE
+      size: PLAYER_SIZE,
+      invulnerableUntil: 0
     })
     
     // Initialize first wave
-    const firstWaveEnemies = spawnWaveEnemies(1, CANVAS_WIDTH, CANVAS_HEIGHT)
+    const firstWaveEnemies = spawnWaveEnemies(startingWave, CANVAS_WIDTH, CANVAS_HEIGHT)
     setWaveEnemies(firstWaveEnemies)
     setCurrentWaveEnemies(firstWaveEnemies)
     setEnemies([])
@@ -882,45 +898,98 @@ function App() {
   useEffect(() => {
     if (gameState !== GAME_STATES.PLAYING) return;
 
-    let playerHealthLoss = 0;
-    let scoreToAdd = 0;
-    const sparksToAdd = [];
+    const now = performance.now();
+    let didDamagePlayer = false;
+    let enemyToKill = null;
+    /* boss touch handled below */
     const enemiesToUpdate = new Map();
+    const sparksToAdd = [];
+    let scoreToAdd = 0;
 
+    
+
+    // Parry: touching enemies die instantly
     enemies.forEach(enemy => {
-      if (enemy.alive && distance(player, enemy) < PLAYER_SIZE + enemy.body.radius) {
-        if (player.parryActive) {
-          const damagedEnemy = damageEnemy(enemy, 100); // Instantly kill the enemy
-          enemiesToUpdate.set(enemy, damagedEnemy);
+      if (enemy.alive && player.parryActive && distance(player, enemy) < PLAYER_SIZE + enemy.body.radius) {
+        const damagedEnemy = damageEnemy(enemy, 100);
+        enemiesToUpdate.set(enemy, damagedEnemy);
 
-          if (!damagedEnemy.alive && enemy.alive) {
-            const deathKey = (enemy.body?.radius || 10) >= 12 ? 'enemy/death_medium' : 'enemy/death_small';
-            playSfx(deathKey, { volume: 0.7 });
-            setKilledEnemies(prev => [...prev, damagedEnemy.id]);
-            scoreToAdd += 25;
+        if (!damagedEnemy.alive && enemy.alive) {
+          const deathKey = (enemy.body?.radius || 10) >= 12 ? 'enemy/death_medium' : 'enemy/death_small';
+          playSfx(deathKey, { volume: 0.7 });
+          setKilledEnemies(prev => [...prev, damagedEnemy.id]);
+          scoreToAdd += 25;
 
-            const baseSparkCount = 2;
-            const sparkMultiplier = (1 + permanentUpgrades.sparkYield * 1.5) * (metaEffects.econDropMultiplier || 1);
-            const totalSparks = Math.floor(baseSparkCount * sparkMultiplier);
+          const baseSparkCount = 2;
+          const sparkMultiplier = (1 + permanentUpgrades.sparkYield * 1.5) * (metaEffects.econDropMultiplier || 1);
+          const totalSparks = Math.floor(baseSparkCount * sparkMultiplier);
 
-            for (let i = 0; i < totalSparks; i++) {
-              sparksToAdd.push(createLightSpark(enemy.x, enemy.y));
-            }
-          }
-        } else {
-          switch (enemy.body.onTouch) {
-            case 'damage':
-              playerHealthLoss++;
-              break;
-            case 'immobilize':
-              immobilizePlayer(player, 2000);
-              break;
-            default:
-              break;
+          for (let i = 0; i < totalSparks; i++) {
+            sparksToAdd.push(createLightSpark(enemy.x, enemy.y));
           }
         }
       }
     });
+
+    if (!player.parryActive) {
+      // Non-parry: apply damage by enemy difficulty in chunks of 100
+      if (now >= (player.invulnerableUntil || 0)) {
+        const touching = enemies.filter(e => e.alive && distance(player, e) < PLAYER_SIZE + e.body.radius);
+        if (touching.length > 0) {
+          // Pick the touching enemy with the highest difficulty-based damage
+          let target = touching[0];
+          let targetLoss = Math.floor((target.difficulty || 0) / 100);
+          for (let i = 1; i < touching.length; i++) {
+            const cand = touching[i];
+            const loss = Math.floor((cand.difficulty || 0) / 100);
+            if (loss > targetLoss) {
+              target = cand;
+              targetLoss = loss;
+            }
+          }
+          enemyToKill = target;
+          didDamagePlayer = targetLoss > 0;
+
+          if (didDamagePlayer) {
+            playSfx('player/hit', { volume: 0.8 });
+            setPlayer(prev => {
+              // Non-regenerating life: reduce maxHealth by targetLoss and clamp health
+              const newMax = Math.max(0, prev.maxHealth - targetLoss);
+              const newHealth = Math.min(prev.health - targetLoss, newMax);
+              const next = { ...prev, maxHealth: newMax, health: newHealth, invulnerableUntil: now + TOUCH_INVULN_MS };
+              if ((newMax <= 0 || newHealth <= 0) && prev.health > 0) {
+                setTimeout(() => gameOver(), 100);
+              }
+              return next;
+            });
+          }
+        }
+      }
+    }
+
+    
+
+
+    // Kill the touching enemy on contact (Bosses follow the same rules)
+    if (enemyToKill) {
+      const damagedEnemy = damageEnemy(enemyToKill, 9999);
+      enemiesToUpdate.set(enemyToKill, damagedEnemy);
+
+      if (!damagedEnemy.alive && enemyToKill.alive) {
+        const deathKey = (enemyToKill.body?.radius || 10) >= 12 ? 'enemy/death_medium' : 'enemy/death_small';
+        playSfx(deathKey, { volume: 0.7 });
+        setKilledEnemies(prev => [...prev, damagedEnemy.id]);
+        scoreToAdd += 25;
+
+        const baseSparkCount = 2;
+        const sparkMultiplier = (1 + permanentUpgrades.sparkYield * 1.5) * (metaEffects.econDropMultiplier || 1);
+        const totalSparks = Math.floor(baseSparkCount * sparkMultiplier);
+
+        for (let i = 0; i < totalSparks; i++) {
+          sparksToAdd.push(createLightSpark(enemyToKill.x, enemyToKill.y));
+        }
+      }
+    }
 
     if (enemiesToUpdate.size > 0) {
       setEnemies(prevEnemies =>
@@ -936,16 +1005,7 @@ function App() {
       setScore(prev => prev + scoreToAdd);
     }
 
-    if (playerHealthLoss > 0) {
-      setPlayer(prev => {
-        const newHealth = prev.health - playerHealthLoss;
-        if (newHealth <= 0 && prev.health > 0) { // Ensure gameOver is called only once
-          setTimeout(() => gameOver(), 100);
-        }
-        return { ...prev, health: newHealth };
-      });
-    }
-  }, [enemies, gameState, player, permanentUpgrades.sparkYield, gameOver]);
+  }, [enemies, gameState, player, permanentUpgrades.sparkYield, metaEffects.econDropMultiplier, gameOver]);
 
   // Event listeners
   useEffect(() => {
@@ -970,6 +1030,7 @@ function App() {
           onShowUpgrades={() => setGameState(GAME_STATES.PERMANENT_UPGRADES)}
           totalLightSparks={totalLightSparks}
           permanentUpgrades={permanentUpgrades}
+          highestWaveReached={highestWaveReached}
         />;
       case GAME_STATES.PLAYING:
         return <Game 
