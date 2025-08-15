@@ -74,6 +74,8 @@ function App() {
   const canvasRef = useRef(null)
   const gameLoopRef = useRef(null)
   const lastTimeRef = useRef(0)
+  const damageFlashUntilRef = useRef(0)
+  const hitPulsesRef = useRef([])
   
   // Game state
   const [gameState, setGameState] = useState(GAME_STATES.MENU)
@@ -255,7 +257,13 @@ function App() {
       return prev
     })
   }, [gameState, permanentUpgrades.shieldDuration, tempUpgrades.parry_duration])
-
+  
+  // Visual hit feedback: red flash + expanding pulse
+  const triggerHitFeedback = useCallback((now, x, y) => {
+    damageFlashUntilRef.current = now + 250;
+    hitPulsesRef.current.push({ start: now, x, y, duration: 400 });
+  }, [])
+  
   const startNewGame = () => {
     localStorage.removeItem('totalLightSparks');
     localStorage.removeItem('permanentUpgrades');
@@ -474,6 +482,28 @@ function App() {
         ctx.fill()
         ctx.shadowBlur = 0
       }
+
+      // Hit pulses (expanding rings on damage)
+      if (hitPulsesRef.current.length) {
+        const nowT = currentTime;
+        const newPulses = [];
+        for (const p of hitPulsesRef.current) {
+          const d = p.duration || 400;
+          const t = nowT - p.start;
+          if (t <= d) {
+            const k = t / d;
+            const radius = 20 + k * 60;
+            const alpha = Math.max(0, 0.5 * (1 - k));
+            ctx.strokeStyle = `rgba(255,80,80,${alpha})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            newPulses.push(p);
+          }
+        }
+        hitPulsesRef.current = newPulses;
+      }
       
       const healthBarWidth = 40
       const healthBarHeight = 6
@@ -537,6 +567,16 @@ function App() {
         ctx.globalAlpha = 1
         ctx.shadowBlur = 0
       })
+      
+      // Screen damage flash overlay
+      {
+        const remaining = damageFlashUntilRef.current - currentTime;
+        if (remaining > 0) {
+          const intensity = Math.min(1, Math.max(0, remaining / 250));
+          ctx.fillStyle = `rgba(255, 40, 40, ${0.4 * intensity})`;
+          ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+      }
     }
   }, [gameState, player, enemies, projectiles, sparks, particles, tempUpgrades, spriteAssets, bgCanvas])
 
@@ -812,13 +852,19 @@ function App() {
         })
         
         if (playerHit) {
+          const now = performance.now()
+          triggerHitFeedback(now, player.x, player.y)
           playSfx('player/hit', { volume: 0.8 })
           setPlayer(prev => {
             const newHealth = prev.health - 1
             if (newHealth <= 0) {
               setTimeout(() => gameOver(), 100)
             }
-            return { ...prev, health: newHealth }
+            return { 
+              ...prev, 
+              health: newHealth,
+              invulnerableUntil: Math.max(prev.invulnerableUntil || 0, now + TOUCH_INVULN_MS)
+            }
           })
         }
         
@@ -951,6 +997,7 @@ function App() {
           didDamagePlayer = targetLoss > 0;
 
           if (didDamagePlayer) {
+            triggerHitFeedback(now, player.x, player.y);
             playSfx('player/hit', { volume: 0.8 });
             setPlayer(prev => {
               // Non-regenerating life: reduce maxHealth by targetLoss and clamp health

@@ -201,6 +201,7 @@ const SkillTreeGraph = ({
 
   const handleWheel = useCallback((e) => {
     // Zoom with Ctrl/Cmd (pinch), pan horizontally with Shift+Wheel
+    setHoverId(null);
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const rect = containerRef.current?.getBoundingClientRect();
@@ -230,6 +231,8 @@ const SkillTreeGraph = ({
       origX: panX,
       origY: panY,
     };
+    // Hide any tooltip when starting to drag/pan
+    setHoverId(null);
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
   }, [panX, panY]);
 
@@ -246,6 +249,8 @@ const SkillTreeGraph = ({
       dragRef.current.dragging = false;
       try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     }
+    // Also clear any tooltip when leaving or ending interaction
+    setHoverId(null);
   }, []);
 
   const zoomBy = useCallback((factor) => {
@@ -323,6 +328,13 @@ const SkillTreeGraph = ({
           transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
           transformOrigin: "0 0"
         }}
+        onMouseMove={(e) => {
+          // Clear tooltip if mouse isn't over any skill node
+          if (!(e.target.closest && e.target.closest('[data-skill-node="1"]'))) {
+            setHoverId(null);
+          }
+        }}
+        onMouseLeave={() => setHoverId(null)}
       >
         {visible.map((node) => {
           const pos = toPx(node.position || { x: 0, y: 0 });
@@ -351,6 +363,7 @@ const SkillTreeGraph = ({
             <div
               key={node.id}
               className="absolute"
+              data-skill-node="1"
               style={{
                 left: pos.x,
                 top: pos.y,
